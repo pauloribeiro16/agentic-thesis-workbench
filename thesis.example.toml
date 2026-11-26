@@ -1,39 +1,70 @@
-# Example thesis.toml — Place in the root of your thesis repository.
+# Example thesis.toml — place it at the root of your thesis repository. Every key is optional.
 
 [project]
 title = "Your Thesis Title"
 author = "Author Name"
 language = "en-GB"
 
+[ui]
+locale = "en"                         # en | pt — interface only
+
 [format]
-adapter = "markdown-latex"           # markdown-latex | latex | markdown
-chapters_glob = "chapters/*.md"
-latex_dir = "latex"
-compiler = "tectonic"                # tectonic | latexmk | quarto | typst | none
-expected_sections = 5
-page_limit = 25
-word_targets = { default = [6000, 7500], 1 = [3000, 3500], 9 = [3000, 4000] }
+adapter = "markdown"                  # markdown | markdown-latex | quarto | latex | <plugin id>
+chapters_glob = "chapters/*.md"       # e.g. "[0-9][0-9]_*/*.md" for one folder per chapter
+exclude_dirs = ["Archive"]            # folders never read as chapters (.git and .thesis always excluded)
+expected_sections = 5                 # optional
+word_targets = { default = [6000, 7500], 1 = [3000, 3500] }
+compile_command = []                  # e.g. ["tectonic", "latex/ch{chapter}.tex"] — run from the UI
+
+[format.pages]                        # page budget, read from the last compilation
+targets = { default = [20, 25], 1 = [12, 16] }   # [min, max] pages without references or in-text citations
+pdf = "latex/ch{chapter}.pdf"         # counts the PDF's pages …
+# aux = "latex/ch{chapter}.aux"       # … or up to a LaTeX label (e.g. before the references)
+# aux_label = "endofchapter"
 
 [citations]
-provider = "bibtex"                  # bibtex | csl-json
+provider = "bibtex"                   # bibtex | csl-json | <plugin id>
 bib_file = "references.bib"
-csl_file = "references.json"
-library_dir = "LITERATURE"
-syntax = "author-year"               # author-year | pandoc | latex
+csl_file = "references.json"          # for csl-json (Zotero / Mendeley / Better BibTeX)
+library_dir = "LITERATURE"            # optional: one folder per work with the PDF or full_text.md
+syntax = "author-year"                # author-year | pandoc | latex
 ledger_file = ".thesis/citations/ledger.json"
+no_year_keys = []                     # e.g. ["GDPR", "AI Act"] — cited as (GDPR, Art. 5)
+
+[citations.aliases]                   # shorthand in the text -> bibliography key
+# "nist, 2024" = "NISTCSF2024"
 
 [agents]
 dialogue_dir = ".thesis/dialogue"
-proposals_file = ".thesis/proposals/proposals.json"
+dialogue_profile = "en"               # en | pt-legacy
 comments_dir = ".thesis/comments"
+proposals_file = ".thesis/proposals/proposals.json"
+tasks_dir = ".thesis/tasks"
+reviews_dir = ".thesis/reviews"
+roles_dirs = [".thesis/roles"]
 style_guide_file = ".thesis/style/guide.json"
-moderator_name = "Author"
+moderator_name = "Author Name"
 sign_decisions = true
+# key_path = "~/.config/agentic-thesis-workbench/moderator.key"
+
+[plugins]
+dirs = [".thesis/plugins"]
 
 [quality]
-presets = ["academic-base"]
+packs = ["core", "citations", "style", "governance", "agent-review"]
+disabled_checks = []
 max_sentence_words = 40
 forbid_first_person = true
-spelling_variant = "en-GB"           # none | en-GB | en-US
-prohibited_phrases = ["significant gap", "critical gap"]
+spelling_variant = "en-GB"            # none | en-GB | en-US
+prohibited_phrases = ["significant gap"]
 emphasis_words = ["crucial", "pivotal", "robust", "seamless", "delve", "leverage"]
+
+[quality.options]                     # free-form options read by plugins
+cite_order = "alpha"                  # alpha | none
+forward_allowed = { 5 = [8] }         # chapter 5 may refer ahead to chapter 8
+placeholder_words = []
+
+# [[workflows]]
+# id = "quick-check"
+# description = "Audit and tone only"
+# roles = ["chapter-auditor", "tone-reviewer"]

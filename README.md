@@ -1,64 +1,80 @@
 # Agentic Thesis Workbench
 
-A **standalone, local-first, model-agnostic web workbench** for writing, auditing, and governing academic theses with multiple AI agents under strict human-in-the-loop control.
+A local, model-agnostic web workbench for writing a thesis with several AI agents under the author's control.
 
-- **Zero runtime dependencies:** Pure Python 3.11+ standard library backend + vanilla HTML/CSS/JS frontend.
-- **Bring Your Own Format:** Markdown+LaTeX, pure LaTeX, or Markdown/Quarto configured via `thesis.toml`.
-- **Bring Your Own Citations:** BibTeX or CSL-JSON (Zotero / Mendeley / Better BibTeX), configurable citation syntax (`author-year`, `pandoc`, `latex`), and a SHA-256 verified passage ledger.
-- **Bring Your Own Agents:** Model-agnostic append-only dialogue threads with HMAC-SHA256 signed author approvals and a full [Agent Manual](docs/AGENT_MANUAL.md).
-- **Structural & Consistency Checks:** Configurable word/page budgets, heading structure, citation resolution, spelling variant (`en-GB` / `en-US`), approved glossary (`style/guide.json`), formatting consistency, plus qualitative agent review slots for narrative coherence and writing tone.
-- **Standalone or Embedded:** Runs independently on `127.0.0.1:8765`, or embeds cleanly behind a host portal (such as `second-brain`) using `--host-shell second-brain`.
+- **Zero dependencies:** Python 3.11+ standard library and vanilla HTML/CSS/JS. No build step; the test suite runs in seconds.
+- **Bring your own format, citations and agents:** `thesis.toml` says where things are; your own plan
+  (`.thesis/plan.toml`: chapters, pages, words, sections, what each chapter must argue, writing rules) is kept
+  apart. The engine ships with **no limits of its own** — an unset rule reports "not configured".
+- **Comments that are easy to make and easy to close:** select text, press `C` (comment) or `S` (suggest a change);
+  agents answer with before/after proposals; you accept, an implementer applies, you confirm — all in a *To close* queue.
+- **Roles as templates for sub-agents:** reviewers (tone, narrative, consistency, citations, examiner), drafters and an
+  implementer, exportable to Claude Code sub-agents, Agent Skills (`SKILL.md`) or plain prompts.
+- **Pages, not words:** the page budget comes from the last LaTeX/PDF build (references and in-text citations
+  left out); words only translate it with each chapter's own words per page. Compile from the Manuscript and
+  read the PDF next to your comments — comments always stay on the text.
+- **Change proposals** decided item by item, sealed, registered in the dialogue and applied by an implementer.
+- **Quality checks as plugins:** structure, formatting, citations, style, page budget, governance and agent reviews —
+  no global score, every check names its rule. Add your own rules in `.thesis/plugins/`.
+- **Human-in-the-loop by construction:** agents only propose; approvals are HMAC-sealed by the author's key, so an
+  agent cannot approve a decision or a text change by editing a file.
+- **Interface in English or Portuguese** (`[ui] locale`); data, files and code stay in English.
+- **Standalone or embedded** behind a host portal (`--host-shell second-brain`).
 
----
-
-## Quick Start
-
-Run against the included sample thesis:
-
-```bash
-python3 -m atw serve --workspace examples/sample-thesis --port 8765
-```
-
-Open `http://127.0.0.1:8765`.
-
-Initialize your own thesis repository:
-
-```bash
-python3 -m atw init --workspace /path/to/your-thesis
-python3 -m atw serve --workspace /path/to/your-thesis --port 8765
-```
-
-Run structural and consistency checks from the CLI:
+## Quick start
 
 ```bash
-python3 -m atw check --workspace /path/to/your-thesis
+python3 -m atw serve --workspace examples/sample-thesis      # http://127.0.0.1:8765
+python3 -m atw init  --workspace /path/to/your-thesis        # thesis.toml, .thesis/, AGENTS.md
+python3 -m atw check --workspace /path/to/your-thesis        # quality checks in the terminal
 ```
 
----
+Working with agents:
 
-## Embedding in a Host Platform (e.g. `second-brain`)
+```bash
+python3 -m atw task new --workflow chapter-review --chapter 3 --workspace /path/to/thesis
+# tell your agent: "Do task T-001 (read .thesis/tasks/T-001.json)"
+python3 -m atw review validate T-001 --workspace /path/to/thesis
+python3 -m atw roles export --to claude --workspace /path/to/thesis   # or: skills | markdown
+```
 
-All frontend API requests use relative paths (`api/...`), so the workbench works identically at `/` (standalone) and under a reverse-proxy prefix like `/thesis/`.
+Run the tests: `python3 -m unittest discover -s tests`.
 
-Example `[[area]]` block:
+## Layout
+
+```
+atw/            engine: config, formats, citations, dialogue (governance), comments, tasks, roles, quality, plugins, server
+atw/builtin/    built-in plugins (formats, checks) — same contract as third-party ones
+atw/roles/      built-in roles (ROLE.md) and workflows.toml
+web/            single-page app + i18n/{en,pt}.json
+docs/           AGENT_MANUAL.md · SCHEMAS.md · PLUGINS.md
+```
+
+## Embedding in a host portal
+
+All API calls are relative (`api/...`), so the app works at `/` and under a prefix such as `/thesis/`:
 
 ```toml
 [[area]]
 id = "thesis"
-name = "Thesis"
 url = "/thesis/"
   [area.service]
-  dir = ["~/Projects/agentic-thesis-workbench"]
-  command = ["python3", "-m", "atw", "serve", "--workspace", "/path/to/your-thesis", "--port", "{port}", "--host-shell", "second-brain"]
-  port = 8765
+  command = ["python3", "-m", "atw", "serve", "--workspace", "/path/to/thesis", "--port", "{port}", "--host-shell", "second-brain"]
   health = "/api/etag"
 ```
 
-When `--host-shell second-brain` (or `HOST_SHELL=second-brain`) is active, the workbench loads `/tokens.css` and `/nav.js` from the host and registers its sub-tabs via `window.plat.setSub(...)`.
+`GET api/summary` gives a compact status for the host's home page.
 
----
+## Security
+
+The server binds to 127.0.0.1, rejects requests whose `Host` or `Origin` is not local (DNS-rebinding and
+cross-site protection) and only accepts JSON POSTs. Local plugins in `.thesis/plugins/` are Python code from the
+thesis repository: only enable folders you trust. The signing key lives outside the repository
+(`~/.config/agentic-thesis-workbench/moderator.key` by default, or `[agents] key_path` / `ATW_SIGNING_KEY`).
 
 ## Documentation
 
-- [docs/AGENT_MANUAL.md](docs/AGENT_MANUAL.md) — How any AI agent interacts with, reviews, and customizes the workbench.
-- [thesis.example.toml](thesis.example.toml) — Complete annotated configuration reference.
+- [docs/AGENT_MANUAL.md](docs/AGENT_MANUAL.md) — how agents do tasks, run roles and customise the workbench
+- [docs/SCHEMAS.md](docs/SCHEMAS.md) — task, review, comment, ledger and style-guide formats
+- [docs/PLUGINS.md](docs/PLUGINS.md) — writing checks, formats, citation providers and roles
+- [thesis.example.toml](thesis.example.toml) — annotated configuration

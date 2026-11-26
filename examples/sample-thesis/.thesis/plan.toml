@@ -1,0 +1,15 @@
+# Jane's plan for this sample thesis: her choices, not engine defaults.
+
+[chapter_defaults]
+words = [200, 1000]
+sections = 2
+
+[[chapters]]
+number = 1
+title = "Introduction"
+narrative = "States the governance problem of multi-agent review and the research question."
+
+[quality]
+max_sentence_words = 40
+forbid_first_person = true
+spelling_variant = "en-GB"

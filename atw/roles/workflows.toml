@@ -1,0 +1,21 @@
+# Workflows run several roles on the same chapter, ideally as parallel sub-agents, then consolidate.
+
+[[workflows]]
+id = "chapter-review"
+description = "Full review of one chapter: audit, tone, narrative and citations."
+roles = ["chapter-auditor", "tone-reviewer", "narrative-reviewer", "citation-verifier"]
+
+[[workflows]]
+id = "close-comments"
+description = "Draft proposals for every open comment in a chapter."
+roles = ["proposal-drafter"]
+
+[[workflows]]
+id = "apply-approved"
+description = "Apply the author's approved changes in a chapter."
+roles = ["implementer"]
+
+[[workflows]]
+id = "pre-submission"
+description = "Before sending a chapter: audit, consistency with decisions, examiner questions."
+roles = ["chapter-auditor", "consistency-checker", "jury-examiner"]

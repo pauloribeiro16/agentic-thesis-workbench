@@ -2,12 +2,12 @@
 title = "Sample Doctoral Dissertation"
 author = "Jane Researcher"
 language = "en-GB"
+plan = ".thesis/plan.toml"   # the author's targets and rules live there
 
 [format]
 adapter = "markdown"
 chapters_glob = "chapters/*.md"
 compiler = "none"
-word_targets = { default = [200, 1000] }
 
 [citations]
 provider = "bibtex"
@@ -24,7 +24,3 @@ style_guide_file = ".thesis/style/guide.json"
 moderator_name = "Jane"
 sign_decisions = true
 
-[quality]
-max_sentence_words = 40
-forbid_first_person = true
-spelling_variant = "en-GB"

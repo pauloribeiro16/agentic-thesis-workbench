@@ -1,56 +1,96 @@
-"""Model-agnostic multi-agent dialogue parser, HMAC moderator sealing, comments & proposals."""
+"""Model-agnostic multi-agent dialogue: parsing, governance (who may change a state) and sealed decisions.
+
+Governance rule: agents only *propose* states. `APPROVED` (or any author-only state) takes effect only
+from a moderator decision block carrying a valid HMAC seal (when `sign_decisions = true`). Anything else
+that claims approval is shown as an unauthorised claim and never changes the question state.
+"""
 from __future__ import annotations
 
 import datetime as dt
 import hashlib
 import hmac
-import json
 import os
 import re
 import secrets
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from .config import WorkbenchConfig
 
 QID = r"(?:QT-\d+|Q\d+)"
-RE_TURN = re.compile(r"^##\s+(?:Turn|Vez|\d+\.)?\s*(.+?)\s*$", re.I)
 RE_QBLOCK = re.compile(rf"^\*\*({QID})\b\s*[—–-]?\s*(.*?)\*\*\s*$")
-RE_VERDICT = re.compile(
-    r"`?\b(AGREE WITH CHANGES|PARTIALLY AGREE|AGREE|DISAGREE|CONCORDO EM PARTE|CONCORDO|DISCORDO)\b`?",
-    re.I,
-)
 RE_ROW = re.compile(rf"^\|\s*\**`?({QID})`?\**\s*\|")
-RE_MOD_DECISION = re.compile(rf"(?:Decision on|Decis[ãa]o sobre)\s+`?({QID})`?\s*\(`([^`]+)`\)", re.I)
 RE_DATE = re.compile(r"(\d{4}-\d{2}-\d{2})")
-RE_SEAL = re.compile(r"^<!--\s*(?:moderator|moderador):\s*v1\s+([0-9a-f]{64})\s*-->\s*$")
-NOT_THREADS = {"README.md", "IMPLEMENTATION_LOG.md"}
+NEED_STATES = {"AGENT_CONSENSUS", "AGENT_DEADLOCK", "AUTHOR_RESERVED", "SINGLE_PROPOSAL"}
+AUTHOR_ONLY_STATES = {"APPROVED"}
 
-STATE_ALIASES = [
-    ("APPROVED", "APPROVED"),
-    ("APROVADA", "APPROVED"),
-    ("CLOSED", "APPROVED"),
-    ("FECHADA", "APPROVED"),
-    ("DEADLOCK", "AGENT_DEADLOCK"),
-    ("IMPASSE", "AGENT_DEADLOCK"),
-    ("DISAGREE", "AGENT_DEADLOCK"),
-    ("RESERVED", "AUTHOR_RESERVED"),
-    ("RESERVADA", "AUTHOR_RESERVED"),
-    ("AUTHOR", "AUTHOR_RESERVED"),
-    ("AUTOR", "AUTHOR_RESERVED"),
-    ("CONSENSUS", "AGENT_CONSENSUS"),
-    ("CONSENSO", "AGENT_CONSENSUS"),
-    ("SINGLE_PROPOSAL", "SINGLE_PROPOSAL"),
-    ("PROPOSTA_UNICA", "SINGLE_PROPOSAL"),
+
+@dataclass(frozen=True)
+class Profile:
+    """Vocabulary of a dialogue format. `en` is canonical; `pt-legacy` reads/writes older Portuguese threads."""
+    name: str
+    turn_words: tuple[str, ...]
+    verdicts: tuple[str, ...]
+    moderator_heading: re.Pattern
+    decision: re.Pattern
+    seal_tag: str
+    state_aliases: tuple[tuple[str, str], ...]
+    skip_files: tuple[str, ...]
+    skip_substrings: tuple[str, ...] = ()
+
+    def seal_re(self) -> re.Pattern:
+        return re.compile(r"^<!--\s*(?:moderator|moderador):\s*v1\s+([0-9a-f]{64})\s*-->\s*$")
+
+
+_EN_STATES = (
+    ("AUTHOR_RESERVED", "AUTHOR_RESERVED"), ("AGENT_CONSENSUS", "AGENT_CONSENSUS"),
+    ("AGENT_DEADLOCK", "AGENT_DEADLOCK"), ("SINGLE_PROPOSAL", "SINGLE_PROPOSAL"),
+    ("APPROVED", "APPROVED"), ("CLOSED", "APPROVED"), ("REJECTED", "REJECTED"),
+    ("DEADLOCK", "AGENT_DEADLOCK"), ("RESERVED", "AUTHOR_RESERVED"), ("CONSENSUS", "AGENT_CONSENSUS"),
     ("OPEN", "OPEN"),
-    ("ABERTA", "OPEN"),
-]
+)
+_PT_STATES = (
+    ("CONSENSO_AGENTES", "AGENT_CONSENSUS"), ("RESERVADA_AUTOR", "AUTHOR_RESERVED"), ("IMPASSE_AGENTES", "AGENT_DEADLOCK"),
+    ("AUTOR", "AUTHOR_RESERVED"), ("RESERVADA", "AUTHOR_RESERVED"), ("CONSENSO", "AGENT_CONSENSUS"), ("IMPASSE", "AGENT_DEADLOCK"),
+    ("PROPOSTA_UNICA", "SINGLE_PROPOSAL"), ("PROPOSTA ÚNICA", "SINGLE_PROPOSAL"), ("APROVADA", "APPROVED"),
+    ("FECHADA", "APPROVED"), ("REJEITADA", "REJECTED"), ("ABERTA", "OPEN"),
+)
+
+PROFILES: dict[str, Profile] = {
+    "en": Profile(
+        name="en",
+        turn_words=("Turn",),
+        verdicts=("AGREE WITH CHANGES", "PARTIALLY AGREE", "AGREE", "DISAGREE"),
+        moderator_heading=re.compile(r"^Moderator Decision\b", re.I),
+        decision=re.compile(rf"Decision on\s+`?({QID})`?\s*\(`([^`]+)`\)", re.I),
+        seal_tag="moderator",
+        state_aliases=_EN_STATES,
+        skip_files=("README.md", "IMPLEMENTATION_LOG.md"),
+    ),
+    "pt-legacy": Profile(
+        name="pt-legacy",
+        turn_words=("Turn", "Vez"),
+        verdicts=("AGREE WITH CHANGES", "PARTIALLY AGREE", "AGREE", "DISAGREE",
+                  "CONCORDO EM PARTE", "CONCORDO", "DISCORDO"),
+        moderator_heading=re.compile(r"^(?:Moderator Decision|Delibera[çc][ãa]o do Moderador)\b", re.I),
+        decision=re.compile(rf"(?:Decision on|Decis[ãa]o sobre)\s+`?({QID})`?\s*\(`([^`]+)`\)", re.I),
+        seal_tag="moderador",
+        state_aliases=_PT_STATES + _EN_STATES,
+        skip_files=("README.md", "IMPLEMENTATION_LOG.md"),
+        skip_substrings=("_anexo",),
+    ),
+}
 
 
-def canonical_state(raw: str) -> str:
-    norm = raw.replace("`", "").replace("*", "").strip().upper()
-    for token, canon in STATE_ALIASES:
-        if token in norm:
+def profile_for(cfg: WorkbenchConfig) -> Profile:
+    return PROFILES.get(cfg.dialogue_profile, PROFILES["en"])
+
+
+def canonical_state(raw: str, profile: Profile | None = None) -> str:
+    norm = raw.replace("`", "").replace("*", "").strip().upper().replace("-", "_")
+    for token, canon in (profile or PROFILES["pt-legacy"]).state_aliases:
+        if re.search(rf"(?<![A-Z_]){re.escape(token)}(?![A-Z_])", norm):
             return canon
     return "OPEN"
 
@@ -60,40 +100,44 @@ def agent_color_slot(name: str, is_moderator: bool = False) -> str:
         return "mod"
     if not name:
         return "0"
-    digest = hashlib.sha256(name.strip().lower().encode("utf-8")).digest()
-    return str(digest[0] % 4)
+    return str(hashlib.sha256(name.strip().lower().encode("utf-8")).digest()[0] % 4)
 
 
-def parse_agent_from_heading(heading: str, moderator_name: str) -> tuple[str, str]:
-    """Model-agnostic parser: extracts speaker identity from any 'Turn N — <Agent> — YYYY-MM-DD' heading."""
-    h_low = heading.lower()
-    mod_low = moderator_name.lower()
-    if "moderator" in h_low or "moderador" in h_low or (mod_low and mod_low in h_low):
-        return moderator_name, "moderator"
-    parts = [p.strip() for p in re.split(r"\s+[—–-]\s+", heading) if p.strip()]
-    filtered = [
-        p for p in parts
-        if not RE_DATE.fullmatch(p) and not re.match(r"^(?:turn|vez)\s+\d+$", p, re.I)
-    ]
-    if filtered:
-        return filtered[0], "agent"
-    return "Agent", "agent"
+def parse_heading(heading: str, cfg: WorkbenchConfig, profile: Profile) -> tuple[str, str]:
+    """Returns (speaker, kind). kind is 'moderator' only for the moderator decision heading or when the
+    speaker part is exactly the configured moderator name — never by substring."""
+    if profile.moderator_heading.search(heading):
+        return cfg.moderator_name, "moderator"
+    parts = [p.strip() for p in re.split(r"\s+[—–]\s+|\s+-\s+", heading) if p.strip()]
+    words = "|".join(re.escape(w) for w in profile.turn_words)
+    speaker = ""
+    for p in parts:
+        if RE_DATE.fullmatch(p) or re.fullmatch(rf"(?:{words})\s+\d+", p, re.I):
+            continue
+        speaker = p
+        break
+    if not speaker:
+        return "", "section"
+    base = re.sub(r"\s*\(.*?\)\s*$", "", speaker).strip()
+    if cfg.moderator_name and base.lower() == cfg.moderator_name.lower():
+        return cfg.moderator_name, "moderator"
+    if not re.match(rf"^(?:{words})\b", heading, re.I) and not RE_DATE.search(heading):
+        return speaker, "section"  # a plain "## Background" heading, not a turn
+    return speaker, "agent"
 
 
 class ModeratorSeal:
-    """Optional HMAC-SHA256 authentication for human moderator decisions."""
+    """HMAC-SHA256 seal for human moderator decisions. The key never leaves the author's machine."""
 
     def __init__(self, cfg: WorkbenchConfig) -> None:
         self.enabled = cfg.sign_decisions
+        self.profile = profile_for(cfg)
         self.key_path = (
-            Path(cfg.key_path).expanduser()
-            if cfg.key_path
+            Path(cfg.key_path).expanduser() if cfg.key_path
             else Path.home() / ".config" / "agentic-thesis-workbench" / "moderator.key"
         )
 
     def _key(self, create: bool = False) -> bytes | None:
-        if not self.enabled:
-            return None
         if self.key_path.exists():
             return self.key_path.read_bytes().strip()
         if not create:
@@ -104,76 +148,92 @@ class ModeratorSeal:
             fh.write(secrets.token_hex(32).encode("ascii"))
         return self.key_path.read_bytes().strip()
 
-    @staticmethod
-    def canonical_body(lines: list[str]) -> str:
-        out = [l.rstrip() for l in lines if not RE_SEAL.match(l.strip())]
+    def canonical_body(self, lines: list[str]) -> str:
+        rx = self.profile.seal_re()
+        out = [l.rstrip() for l in lines if not rx.match(l.strip())]
         while out and out[-1] in ("", "---"):
             out.pop()
         while out and out[0] in ("", "---"):
             out.pop(0)
         return "\n".join(out)
 
-    def sign(self, file_name: str, block: str) -> str:
-        k = self._key(create=True)
-        body = block.rstrip("\n")
-        if not k:
-            return body + "\n"
-        sig = hmac.new(k, f"{file_name}\n{self.canonical_body(body.splitlines())}".encode("utf-8"), hashlib.sha256).hexdigest()
-        return f"{body}\n\n<!-- moderator: v1 {sig} -->\n"
+    def mac(self, file_name: str, lines: list[str], key: bytes) -> str:
+        msg = f"{file_name}\n{self.canonical_body(lines)}".encode("utf-8")
+        return hmac.new(key, msg, hashlib.sha256).hexdigest()
 
-    def verify(self, file_name: str, lines: list[str], seal: str | None) -> bool:
+    def sign(self, file_name: str, block: str) -> str:
+        body = block.rstrip("\n")
+        if not self.enabled:
+            return body + "\n"
+        k = self._key(create=True)
+        return f"{body}\n\n<!-- {self.profile.seal_tag}: v1 {self.mac(file_name, body.splitlines(), k)} -->\n"
+
+    def sign_payload(self, payload: str) -> str:
+        """Seal an arbitrary approval (e.g. an approved text change). Empty when signing is disabled."""
+        if not self.enabled:
+            return ""
+        return hmac.new(self._key(create=True), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+
+    def verify_payload(self, payload: str, seal: str) -> bool:
+        if not self.enabled:
+            return True
+        k = self._key(create=False)
+        return bool(k and seal) and hmac.compare_digest(seal, hmac.new(k, payload.encode("utf-8"), hashlib.sha256).hexdigest())
+
+    def verify(self, file_name: str, lines: list[str]) -> bool:
+        rx = self.profile.seal_re()
+        seal = next((rx.match(l.strip()).group(1) for l in lines if rx.match(l.strip())), None)
         k = self._key(create=False)
         if not k or not seal:
             return False
-        expected = hmac.new(k, f"{file_name}\n{self.canonical_body(lines)}".encode("utf-8"), hashlib.sha256).hexdigest()
-        return hmac.compare_digest(seal, expected)
+        return hmac.compare_digest(seal, self.mac(file_name, lines, k))
+
+
+def _new_q(qid: str, title: str, thread: str) -> dict[str, Any]:
+    return {"id": qid, "title": title or qid, "state": "OPEN", "thread": thread, "owner": "", "summary": "",
+            "verdicts": [], "history": [], "authenticated": False, "unauthorized_claims": []}
 
 
 class DialogueService:
-    """Reads append-only dialogue threads, proposals, and anchored comments."""
+    """Reads append-only dialogue threads and appends sealed moderator decisions."""
 
     def __init__(self, cfg: WorkbenchConfig) -> None:
         self.cfg = cfg
+        self.profile = profile_for(cfg)
         self.seal = ModeratorSeal(cfg)
 
     @property
-    def dialogue_root(self) -> Path:
+    def root(self) -> Path:
         return self.cfg.workspace / self.cfg.dialogue_dir
 
-    def list_threads(self) -> list[dict[str, Any]]:
-        root = self.dialogue_root
-        if not root.is_dir():
+    def thread_paths(self) -> list[Path]:
+        if not self.root.is_dir():
             return []
-        threads: list[dict[str, Any]] = []
-        for p in sorted(root.glob("*.md")):
-            if p.name in NOT_THREADS:
-                continue
-            threads.append(self.parse_thread(p))
-        return threads
+        return [p for p in sorted(self.root.glob("*.md"))
+                if p.name not in self.profile.skip_files
+                and not any(s in p.name for s in self.profile.skip_substrings)]
+
+    def list_threads(self) -> list[dict[str, Any]]:
+        return [self.parse_thread(p) for p in self.thread_paths()]
+
+    def all_questions(self) -> list[dict[str, Any]]:
+        return [q for t in self.list_threads() for q in t["questions"]]
 
     def parse_thread(self, path: Path) -> dict[str, Any]:
         raw = path.read_text(encoding="utf-8", errors="ignore")
-        sha = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
         lines = raw.splitlines()
         turns: list[dict[str, Any]] = []
         cur: dict[str, Any] | None = None
-
         for i, line in enumerate(lines):
             if line.startswith("## ") and not line.startswith("###"):
                 if cur is not None:
                     turns.append(cur)
                 heading = line[3:].strip()
-                speaker, kind = parse_agent_from_heading(heading, self.cfg.moderator_name)
+                speaker, kind = parse_heading(heading, self.cfg, self.profile)
                 dm = RE_DATE.search(heading)
-                cur = {
-                    "heading": heading,
-                    "agent": speaker,
-                    "kind": kind,
-                    "slot": agent_color_slot(speaker, is_moderator=(kind == "moderator")),
-                    "date": dm.group(1) if dm else "",
-                    "line": i + 1,
-                    "lines": [line],
-                }
+                cur = {"heading": heading, "agent": speaker, "kind": kind,
+                       "slot": agent_color_slot(speaker, kind == "moderator"),
+                       "date": dm.group(1) if dm else "", "line": i + 1, "lines": [line]}
             elif cur is not None:
                 cur["lines"].append(line)
         if cur is not None:
@@ -181,103 +241,136 @@ class DialogueService:
 
         questions: dict[str, dict[str, Any]] = {}
         agents_seen: set[str] = set()
+        verdict_rx = re.compile(r"`?\b(" + "|".join(re.escape(v) for v in self.profile.verdicts) + r")\b`?", re.I)
+        seal_rx = self.profile.seal_re()
 
         for idx, t in enumerate(turns):
-            body_lines = t["lines"][1:]
+            body = t["lines"][1:]
             t["idx"] = idx
-            t["md"] = "\n".join(body_lines).strip()
-            seal_hex = next(
-                (RE_SEAL.match(l.strip()).group(1) for l in body_lines if RE_SEAL.match(l.strip())),
-                None,
-            )
-            t["sealed"] = self.seal.verify(path.name, t["lines"], seal_hex) if t["kind"] == "moderator" else False
+            t["sealed"] = self.seal.verify(path.name, t["lines"]) if t["kind"] == "moderator" else False
+            t["md"] = "\n".join(l for l in body if not seal_rx.match(l.strip())).strip()
             del t["lines"]
-
             if t["kind"] == "agent":
                 agents_seen.add(t["agent"])
+            authority = t["kind"] == "moderator" and (t["sealed"] or not self.cfg.sign_decisions)
+            open_q: str | None = None
 
-            for bl in body_lines:
-                qm = RE_QBLOCK.match(bl.strip())
+            for bl in body:
+                s = bl.strip()
+                qm = RE_QBLOCK.match(s)
                 if qm:
                     qid, title = qm.group(1), qm.group(2).strip()
-                    q = questions.setdefault(
-                        qid,
-                        {"id": qid, "title": title or qid, "state": "OPEN", "thread": path.name, "verdicts": []},
-                    )
+                    q = questions.setdefault(qid, _new_q(qid, title, path.name))
                     if title and q["title"] == qid:
                         q["title"] = title
-                rm = RE_ROW.match(bl.strip())
-                if rm:
-                    cells = [c.strip().strip("*`") for c in bl.strip().strip("|").split("|")]
+                    open_q = qid
+                    continue
+                if open_q and t["kind"] == "agent":
+                    vm = verdict_rx.search(s)
+                    if vm and ("verdict" in s.lower() or "veredicto" in s.lower() or s.startswith("-")):
+                        questions[open_q]["verdicts"].append(
+                            {"agent": t["agent"], "verdict": vm.group(1).upper(), "turn": idx})
+                        open_q = None
+                rm = RE_ROW.match(s)
+                if rm and t["kind"] in ("agent", "moderator"):
+                    cells = [c.strip().strip("*`").strip() for c in s.strip("|").split("|")]
                     if len(cells) >= 3:
                         qid = rm.group(1)
-                        q = questions.setdefault(
-                            qid,
-                            {"id": qid, "title": cells[1] or qid, "state": "OPEN", "thread": path.name, "verdicts": []},
-                        )
+                        q = questions.setdefault(qid, _new_q(qid, cells[1], path.name))
                         if cells[1]:
                             q["title"] = cells[1]
-                        q["state"] = canonical_state(cells[2])
-                dm2 = RE_MOD_DECISION.search(bl)
-                if dm2:
-                    qid, st = dm2.group(1), canonical_state(dm2.group(2))
-                    q = questions.setdefault(
-                        qid,
-                        {"id": qid, "title": qid, "state": st, "thread": path.name, "verdicts": []},
-                    )
-                    q["state"] = st
-                    q["authenticated"] = t["sealed"]
+                        if len(cells) > 3:
+                            q["owner"] = cells[3]
+                        if len(cells) > 4:
+                            q["summary"] = cells[4]
+                        st = canonical_state(cells[2], self.profile)
+                        self._apply(q, st, t, idx, authority, source="table")
+                dm2 = self.profile.decision.search(bl)
+                if dm2 and t["kind"] == "moderator":
+                    qid = dm2.group(1)
+                    q = questions.setdefault(qid, _new_q(qid, qid, path.name))
+                    st = canonical_state(dm2.group(2), self.profile)
+                    self._apply(q, st, t, idx, authority, source="decision", note=bl.strip())
 
+        qs = list(questions.values())
+        for q in qs:
+            q["needs_author"] = q["state"] in NEED_STATES
         return {
             "file": path.name,
-            "sha": sha,
+            "sha": hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16],
             "turns_count": len(turns),
             "agents": sorted(agents_seen),
-            "questions": list(questions.values()),
+            "questions": qs,
             "turns": turns,
         }
 
+    @staticmethod
+    def _apply(q: dict[str, Any], st: str, t: dict[str, Any], idx: int, authority: bool, source: str,
+               note: str = "") -> None:
+        author_only = st in AUTHOR_ONLY_STATES
+        if t["kind"] == "agent" and author_only and q["authenticated"] and q["state"] == st:
+            return  # an agent restating a state the author already sealed is not a claim
+        if t["kind"] == "agent" and author_only:
+            q["unauthorized_claims"].append({"turn": idx, "agent": t["agent"], "state": st, "source": source})
+            return
+        if t["kind"] == "moderator" and not authority:
+            q["unauthorized_claims"].append({"turn": idx, "agent": t["agent"], "state": st, "source": "unsealed"})
+            return
+        if t["kind"] == "agent" and q["authenticated"] and q["state"] in AUTHOR_ONLY_STATES:
+            # agents cannot reopen or move an approved question; they must raise a new one
+            q["unauthorized_claims"].append({"turn": idx, "agent": t["agent"], "state": st, "source": source})
+            return
+        if not q["history"] or q["history"][-1]["state"] != st:
+            q["history"].append({"turn": idx, "agent": t["agent"], "state": st, "date": t["date"]})
+        q["state"] = st
+        if t["kind"] == "moderator":
+            q["authenticated"] = bool(t["sealed"])
+            if note:
+                q["decision_note"] = note
+
     def append_decision(self, thread_file: str, expected_sha: str, decisions: list[dict[str, str]]) -> tuple[bool, str]:
-        target = (self.dialogue_root / thread_file).resolve()
-        if self.dialogue_root.resolve() not in target.parents or not target.is_file():
+        target = (self.root / thread_file).resolve()
+        if self.root.resolve() not in target.parents or not target.is_file() or target.suffix != ".md":
             return False, "Thread file not found"
         raw = target.read_text(encoding="utf-8")
-        cur_sha = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
-        if expected_sha and cur_sha != expected_sha:
+        if expected_sha and hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16] != expected_sha:
             return False, "Conflict: thread modified concurrently"
-
+        valid = [d for d in decisions if re.fullmatch(QID, str(d.get("id", "")))]
+        if not valid:
+            return False, "No valid question ids"
         today = dt.date.today().isoformat()
-        qids = ", ".join(f"`{d['id']}`" for d in decisions)
-        lines = [f"## Moderator Decision ({self.cfg.moderator_name}) — {today} (on {qids})", ""]
-        for d in decisions:
-            st = canonical_state(d.get("state", "APPROVED"))
-            note = (d.get("note") or "Approved via workbench.").strip()
-            lines.append(f"- **Decision on `{d['id']}` (`{st}`):** {note}")
-
-        block = self.seal.sign(target.name, "\n".join(lines))
-        sep = "\n\n" if raw.endswith("\n") else "\n\n"
-        target.write_text(raw.rstrip("\n") + sep + block, encoding="utf-8")
+        qids = ", ".join(f"`{d['id']}`" for d in valid)
+        name = self.cfg.moderator_name
+        pt = self.profile.name == "pt-legacy"
+        head = (f"## Deliberação do Moderador ({name}) — {today} (sobre {qids})" if pt
+                else f"## Moderator Decision ({name}) — {today} (on {qids})")
+        out = [head, ""]
+        for d in valid:
+            st = canonical_state(str(d.get("state", "APPROVED")), self.profile)
+            note = " ".join(str(d.get("note") or "").split())[:2000]
+            if pt:
+                label = {"APPROVED": f"APROVADA ({name})", "REJECTED": "REJEITADA", "OPEN": "ABERTA",
+                         "AUTHOR_RESERVED": "RESERVADA"}.get(st, st)
+                out.append(f"- **Decisão sobre `{d['id']}` (`{label}`):** {note or 'Aprovada na bancada.'}")
+            else:
+                out.append(f"- **Decision on `{d['id']}` (`{st}`):** {note or 'Decided in the workbench.'}")
+        block = self.seal.sign(target.name, "\n".join(out))
+        target.write_text(raw.rstrip("\n") + "\n\n" + block, encoding="utf-8")
         return True, "ok"
 
-    def load_proposals(self) -> list[dict[str, Any]]:
-        p = self.cfg.workspace / self.cfg.proposals_file
-        if not p.is_file():
-            return []
-        try:
-            data = json.loads(p.read_text(encoding="utf-8"))
-            return data if isinstance(data, list) else data.get("proposals", [])
-        except Exception:
-            return []
-
-    def load_comments(self) -> dict[str, list[dict[str, Any]]]:
-        d = self.cfg.workspace / self.cfg.comments_dir
-        if not d.is_dir():
-            return {}
-        out: dict[str, list[dict[str, Any]]] = {}
-        for p in sorted(d.glob("*.json")):
-            try:
-                data = json.loads(p.read_text(encoding="utf-8"))
-                out[p.stem] = data if isinstance(data, list) else data.get("comments", [])
-            except Exception:
-                continue
-        return out
+    def append_message(self, thread_file: str, lines: list[str]) -> tuple[bool, str]:
+        """Append a sealed moderator block that records information without changing any question state."""
+        target = (self.root / thread_file).resolve()
+        if self.root.resolve() not in target.parents or not target.is_file() or target.suffix != ".md":
+            return False, "Thread file not found"
+        raw = target.read_text(encoding="utf-8")
+        today = dt.date.today().isoformat()
+        name = self.cfg.moderator_name
+        if self.profile.name == "pt-legacy":
+            out = [f"## Deliberação do Moderador ({name}) — {today} (mensagem aos agentes)", "",
+                   "**Mensagem do moderador aos agentes:**", ""]
+        else:
+            out = [f"## Moderator Decision ({name}) — {today} (message to agents)", "", "**Message to the agents:**", ""]
+        block = self.seal.sign(target.name, "\n".join(out + [str(l) for l in lines]))
+        target.write_text(raw.rstrip("\n") + "\n\n" + block, encoding="utf-8")
+        return True, "ok"

@@ -1,4 +1,4 @@
-"""CLI entry point for Agentic Thesis Workbench (`python3 -m atw`)."""
+"""CLI for Agentic Thesis Workbench (`python3 -m atw ...`)."""
 from __future__ import annotations
 
 import argparse
@@ -7,58 +7,75 @@ import os
 import sys
 from pathlib import Path
 
-from .citations import CitationService
 from .config import load_config
-from .formats import FormatAdapter
-from .quality import run_quality_checks
-from .server import run_server
 
 DEFAULT_TOML = """[project]
 title = "{title}"
 author = "Your Name"
-language = "en-US"
+language = "en-GB"
+plan = ".thesis/plan.toml"           # YOUR targets, chapters and writing rules (not engine defaults)
+
+[ui]
+locale = "en"                        # en | pt  (interface only)
 
 [format]
-adapter = "markdown-latex"           # markdown-latex | latex | markdown
+adapter = "markdown"                 # markdown | markdown-latex | quarto | latex | <plugin id>
 chapters_glob = "chapters/*.md"
-compiler = "none"                    # tectonic | latexmk | quarto | typst | none
-word_targets = {{ default = [5000, 7500] }}
+# compile_command = ["tectonic", "latex/ch{{chapter}}.tex"]
+# [format.pages]
+# limit = 25
+# pdf = "latex/ch{{chapter}}.pdf"
 
 [citations]
-provider = "bibtex"                  # bibtex | csl-json
+provider = "bibtex"                  # bibtex | csl-json | <plugin id>
 bib_file = "references.bib"
-library_dir = "LITERATURE"
 syntax = "author-year"               # author-year | pandoc | latex
 ledger_file = ".thesis/citations/ledger.json"
 
 [agents]
-dialogue_dir = ".thesis/dialogue"
-proposals_file = ".thesis/proposals/proposals.json"
-comments_dir = ".thesis/comments"
-style_guide_file = ".thesis/style/guide.json"
-moderator_name = "Author"
+moderator_name = "Your Name"
 sign_decisions = true
 
 [quality]
-presets = ["academic-base"]
-max_sentence_words = 40
+packs = ["core", "citations", "style", "governance", "agent-review"]
 forbid_first_person = false
-spelling_variant = "en-US"           # none | en-GB | en-US
+spelling_variant = "en-GB"           # none | en-GB | en-US
 """
 
-DEFAULT_AGENTS_MD = """# AGENTS.md — Thesis Collaboration Protocol
+PLAN_TOML = """# Your plan for this thesis — these are your choices, not engine defaults.
+# Delete or change anything. A check whose rule is not set here reports "not configured".
 
-This repository uses **Agentic Thesis Workbench** for human-in-the-loop, multi-agent thesis review.
+# [chapter_defaults]
+# pages = [20, 25]          # pages per chapter, without references or in-text citations
+# words = [6000, 7500]      # reference only; pages decide
+# sections = 5
 
-## Core Rules
-1. **Human-in-the-Loop Gate:** Never edit thesis chapter files directly without an `APPROVED` moderator decision in `{dialogue_dir}/`.
-2. **Append-Only Dialogue:** Add your position at the end of the relevant thread (`{dialogue_dir}/CHn_PLAN.md`) using:
-   ```markdown
-   ## Turn N — <Your Agent Name> (<Model>) — YYYY-MM-DD
-   ```
-3. **Structured Questions:** Open each item with `**Qn — Short title**`, a verdict (`AGREE`, `PARTIALLY AGREE`, `DISAGREE`), documentary evidence, and a concrete before/after proposal before requesting approval.
-4. **Verified Citations:** Never cite a source without recording the exact supporting passage in `{ledger_file}`.
-5. **Customization:** To change writing rules, citation syntax, or glossary terms at the author's request, update `thesis.toml` or `{style_guide_file}` as documented in `docs/AGENT_MANUAL.md`.
+# [[chapters]]
+# number = 1
+# title = "Introduction"
+# pages = [8, 12]
+# narrative = "What this chapter must argue, in one or two sentences."
+
+# [quality]
+# max_sentence_words = 40
+# forbid_first_person = true
+# prohibited_phrases = []
+# emphasis_words = []
+"""
+
+AGENTS_MD = """# AGENTS.md — how agents work in this thesis
+
+This thesis uses Agentic Thesis Workbench. Read `docs/AGENT_MANUAL.md` in the workbench repository.
+
+1. **Never edit chapter files** unless you are running the `implementer` role on changes the author approved and sealed.
+2. **Work through tasks.** When asked to "do T-007", read `{tasks_dir}/T-007.json`, load the role it names
+   (`python3 -m atw roles show <role>`), run it — as a sub-agent if your tool supports one — and write the output
+   named in the packet. Then run `python3 -m atw review validate T-007 --workspace .`.
+3. **Dialogue is append-only** in `{dialogue_dir}/`: `## Turn N — <Agent> (<Model>) — YYYY-MM-DD`, then
+   `**Qn — Title**` and a verdict (`AGREE`, `PARTIALLY AGREE`, `DISAGREE`). Agents propose states; only the author's
+   sealed decision approves.
+4. **Cite only verified passages** (ledger: `{ledger_file}`).
+5. **Change rules through configuration** (`thesis.toml`, style guide, plugins in `.thesis/plugins/`), never in the engine.
 """
 
 
@@ -68,81 +85,153 @@ def cmd_init(workspace: Path) -> int:
     if not toml_path.exists():
         toml_path.write_text(DEFAULT_TOML.format(title=workspace.name), encoding="utf-8")
         print(f"Created {toml_path}")
-    else:
-        print(f"Kept existing {toml_path}")
-
     cfg = load_config(workspace)
-    for rel in (cfg.dialogue_dir, cfg.comments_dir, Path(cfg.ledger_file).parent, Path(cfg.style_guide_file).parent):
+    for rel in (cfg.dialogue_dir, cfg.comments_dir, cfg.tasks_dir, cfg.reviews_dir, cfg.plugin_dirs[0],
+                Path(cfg.ledger_file).parent, Path(cfg.style_guide_file).parent):
         (workspace / rel).mkdir(parents=True, exist_ok=True)
-
-    guide_path = workspace / cfg.style_guide_file
-    if not guide_path.exists():
-        guide_path.write_text(
-            json.dumps({"version": 1, "note": "Link style and glossary rules to deliberation questions.", "entries": []}, indent=2) + "\n",
-            encoding="utf-8",
-        )
-        print(f"Created {guide_path}")
-
+    plan = workspace / ".thesis" / "plan.toml"
+    if not plan.exists():
+        plan.write_text(PLAN_TOML, encoding="utf-8")
+        print(f"Created {plan}")
+    guide = workspace / cfg.style_guide_file
+    if not guide.exists():
+        guide.write_text(json.dumps({"version": 1, "entries": []}, indent=2) + "\n", encoding="utf-8")
+        print(f"Created {guide}")
     agents_md = workspace / "AGENTS.md"
     if not agents_md.exists():
-        agents_md.write_text(
-            DEFAULT_AGENTS_MD.format(
-                dialogue_dir=cfg.dialogue_dir,
-                ledger_file=cfg.ledger_file,
-                style_guide_file=cfg.style_guide_file,
-            ),
-            encoding="utf-8",
-        )
+        agents_md.write_text(AGENTS_MD.format(tasks_dir=cfg.tasks_dir, dialogue_dir=cfg.dialogue_dir,
+                                              ledger_file=cfg.ledger_file), encoding="utf-8")
         print(f"Created {agents_md}")
-
     print("Workspace ready. Run: python3 -m atw serve --workspace", workspace)
     return 0
 
 
-def cmd_check(workspace: Path, as_json: bool) -> int:
-    cfg = load_config(workspace)
-    chapters = FormatAdapter(cfg).discover_chapters(include_content=True)
-    report = run_quality_checks(cfg, chapters, CitationService(cfg))
+def cmd_check(workspace: Path, as_json: bool, chapter: int | None) -> int:
+    from .quality import run_quality_checks
+    report = run_quality_checks(load_config(workspace), only_chapter=chapter)
     if as_json:
-        print(json.dumps(report, indent=2))
-    else:
-        for ch in report["chapters"]:
-            bads = sum(1 for c in ch["checks"] if c["state"] == "bad")
-            warns = sum(1 for c in ch["checks"] if c["state"] == "warn")
-            print(f"Chapter {ch['chapter']:02d} ({ch['title']}) — {ch['words']} words | bad={bads} warn={warns}")
+        print(json.dumps(report, indent=2, ensure_ascii=False))
+        return 0
+    for e in report["plugin_errors"]:
+        print(f"! plugin: {e}")
+    for ch in report["chapters"]:
+        s = ch["summary"]
+        print(f"Chapter {ch['chapter']:02d} {ch['title']} — {ch['words']} words | bad={s['bad']} warn={s['warn']} "
+              f"review={s['na']} error={s['error']}")
+        for c in ch["checks"]:
+            if c["state"] in ("bad", "warn", "error"):
+                print(f"   [{c['state']:5}] {c['id']:<18} {c['count']:>4}  {c['label']}")
+    for c in report["thesis_checks"]:
+        if c["state"] != "ok":
+            print(f"[{c['state']:5}] {c['id']:<18} {c['count']:>4}  {c['label']}")
     return 0
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="atw", description="Agentic Thesis Workbench")
-    sub = parser.add_subparsers(dest="cmd", required=True)
+    p = argparse.ArgumentParser(prog="atw", description="Agentic Thesis Workbench")
+    sub = p.add_subparsers(dest="cmd", required=True)
 
-    p_serve = sub.add_parser("serve", help="Start the local workbench HTTP server")
-    p_serve.add_argument("--workspace", default=".", help="Path to thesis repository")
-    p_serve.add_argument("--port", type=int, default=8765, help="Local port (127.0.0.1 only)")
-    p_serve.add_argument(
-        "--host-shell",
-        default=os.environ.get("HOST_SHELL", "standalone"),
-        choices=("standalone", "second-brain"),
-        help="Use standalone shell or yield to second-brain host shell",
-    )
+    def ws(sp):
+        sp.add_argument("--workspace", default=".", help="path to the thesis repository")
+        return sp
 
-    p_init = sub.add_parser("init", help="Initialize thesis.toml, .thesis/, and AGENTS.md in a workspace")
-    p_init.add_argument("--workspace", default=".", help="Path to thesis repository")
+    s = ws(sub.add_parser("serve", help="start the local web workbench"))
+    s.add_argument("--port", type=int, default=8765)
+    s.add_argument("--host-shell", default=os.environ.get("HOST_SHELL", "standalone"), choices=("standalone", "second-brain"))
+    ws(sub.add_parser("init", help="create thesis.toml, .thesis/ and AGENTS.md"))
+    c = ws(sub.add_parser("check", help="run the quality checks"))
+    c.add_argument("--json", action="store_true")
+    c.add_argument("--chapter", type=int)
 
-    p_check = sub.add_parser("check", help="Run structural and consistency quality checks")
-    p_check.add_argument("--workspace", default=".", help="Path to thesis repository")
-    p_check.add_argument("--json", action="store_true", help="Output JSON report")
+    t = sub.add_parser("task", help="create and inspect tasks for agents").add_subparsers(dest="sub", required=True)
+    tn = ws(t.add_parser("new"))
+    g = tn.add_mutually_exclusive_group(required=True)
+    g.add_argument("--role")
+    g.add_argument("--workflow")
+    tn.add_argument("--chapter", type=int)
+    tn.add_argument("--comments", help="comma-separated comment ids")
+    tn.add_argument("--note", default="")
+    ws(t.add_parser("list"))
+    ts = ws(t.add_parser("show"))
+    ts.add_argument("id")
 
-    args = parser.parse_args(argv)
-    ws = Path(args.workspace).expanduser().resolve()
-    if args.cmd == "serve":
-        run_server(ws, port=args.port, host_shell=args.host_shell)
+    r = sub.add_parser("review", help="validate agent outputs").add_subparsers(dest="sub", required=True)
+    rv = ws(r.add_parser("validate"))
+    rv.add_argument("id")
+
+    ro = sub.add_parser("roles", help="list, show and export agent roles").add_subparsers(dest="sub", required=True)
+    ws(ro.add_parser("list"))
+    rs = ws(ro.add_parser("show"))
+    rs.add_argument("id")
+    re_ = ws(ro.add_parser("export"))
+    re_.add_argument("--to", choices=("claude", "skills", "markdown"), required=True)
+    re_.add_argument("--dest", help="destination folder relative to the workspace")
+
+    ws(sub.add_parser("plugins", help="list loaded plugins and checks"))
+
+    a = p.parse_args(argv)
+    w = Path(a.workspace).expanduser().resolve()
+    if a.cmd == "serve":
+        from .server import run_server
+        run_server(w, port=a.port, host_shell=a.host_shell)
         return 0
-    if args.cmd == "init":
-        return cmd_init(ws)
-    if args.cmd == "check":
-        return cmd_check(ws, as_json=args.json)
+    if a.cmd == "init":
+        return cmd_init(w)
+    if a.cmd == "check":
+        return cmd_check(w, a.json, a.chapter)
+    cfg = load_config(w)
+    if a.cmd == "task":
+        from .tasks import TaskService
+        svc = TaskService(cfg)
+        if a.sub == "new":
+            ids = [x.strip() for x in a.comments.split(",")] if a.comments else None
+            try:
+                for task in svc.create(role=a.role, workflow=a.workflow, chapter=a.chapter, comment_ids=ids, note=a.note):
+                    print(f"{task['id']}  {task.get('role') or 'workflow:' + task.get('workflow', '')}  → {task['output']}")
+            except ValueError as exc:
+                print(f"error: {exc}", file=sys.stderr)
+                return 2
+        elif a.sub == "list":
+            for task in svc.list():
+                print(f"{task['id']}  {task.get('status'):8} ch={task.get('chapter')}  {task.get('role') or task.get('workflow')}")
+        else:
+            task = svc.get(a.id)
+            print(json.dumps(task, indent=2, ensure_ascii=False) if task else f"{a.id}: not found")
+        return 0
+    if a.cmd == "review":
+        from .tasks import TaskService
+        ok, errors = TaskService(cfg).validate(a.id)
+        print("valid" if ok else "invalid:\n- " + "\n- ".join(errors))
+        return 0 if ok else 1
+    if a.cmd == "roles":
+        from .roles import export_roles, load_roles
+        roles, errors = load_roles(cfg)
+        if a.sub == "list":
+            for role in roles.values():
+                print(f"{role.id:<20} writes={role.writes:<9} {role.description}")
+            for e in errors:
+                print(f"! {e}")
+        elif a.sub == "show":
+            role = roles.get(a.id)
+            if not role:
+                print(f"{a.id}: not found", file=sys.stderr)
+                return 2
+            from .roles import contract_text
+            print(role.instructions + contract_text(role, cfg))
+        else:
+            for path in export_roles(cfg, a.to, a.dest):
+                print(f"wrote {path}")
+        return 0
+    if a.cmd == "plugins":
+        from .plugins import load_registry
+        reg = load_registry(cfg)
+        for pl in reg.plugins:
+            print(f"{pl['id']:<24} {pl['version']:<6} {pl['source']}")
+        print(f"\nchecks ({len(reg.checks)}): " + ", ".join(sorted(reg.checks)))
+        print("formats: " + ", ".join(sorted(reg.formats)) + " · citations: " + ", ".join(sorted(reg.citation_providers)))
+        for e in reg.errors:
+            print(f"! {e}")
+        return 0
     return 1
 
 

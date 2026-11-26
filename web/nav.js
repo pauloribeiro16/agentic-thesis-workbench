@@ -15,6 +15,7 @@
   const HASH_AREA = {
     overview: "thesis",
     manuscript: "thesis",
+    queue: "thesis",
     decisions: "thesis",
     quality: "thesis",
     literature: "literature",
@@ -230,6 +231,10 @@
     setBrand(label) {
       const el = bar.querySelector(".pb-title");
       if (el && label) el.textContent = label;
+    },
+    setAreaLabels(map) {
+      AREAS.forEach((a) => { if (map && map[a[0]]) a[1] = map[a[0]]; });
+      bar.querySelectorAll("nav a").forEach((el) => { if (map && map[el.dataset.a]) el.textContent = map[el.dataset.a]; });
     },
     setSearchItems(items) {
       extraItems = Array.isArray(items) ? items : [];
