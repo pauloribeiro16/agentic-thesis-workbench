@@ -60,7 +60,8 @@
   }
 
   function simpleMd(raw) {
-    const escaped = esc(raw || "");
+    const cleaned = String(raw || "").replace(/<!--\s*(?:moderator|moderador):\s*v1\s+[0-9a-f]{64}\s*-->/g, "").trim();
+    const escaped = esc(cleaned);
     return escaped
       .replace(/^### (.+)$/gm, "<h3>$1</h3>")
       .replace(/^## (.+)$/gm, "<h2>$1</h2>")
@@ -271,6 +272,7 @@
           });
           toast(`Decision recorded & sealed for ${qid}`);
           await refreshState();
+          syncSubNav("decisions");
           renderDecisions();
         } catch (err) {
           toast(`Failed: ${err.message}`);
