@@ -217,3 +217,10 @@ details.narrative p { margin: 6px 0 4px; font: 14px/1.55 var(--serif); }
 @media (max-width: 900px) { .q-cols { grid-template-columns: 1fr; } }
 
 .banner { margin-bottom: 16px; font-size: 14px; }
+
+.mermaid-fig { margin: 18px 0; text-align: center; overflow-x: auto; }
+.mermaid-fig svg { max-width: 100%; height: auto; }
+.mermaid-fig:not(.done) pre { text-align: left; }
+.mermaid-fig.done { cursor: zoom-in; }
+.modal:has(.mermaid-big) { width: min(1400px, 96vw); }
+.mermaid-big svg { width: 100%; height: auto; max-width: none !important; }

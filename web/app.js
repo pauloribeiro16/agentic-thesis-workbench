@@ -77,7 +77,7 @@
   function renderMd(raw) {
     const lines = String(raw || "").replace(/<!--[\s\S]*?-->/g, (m) => m.replace(/[^\n]/g, "")).split("\n");
     const out = [];
-    let para = [], list = null, table = null, fence = null;
+    let para = [], list = null, table = null, fence = null, fenceLang = "";
     const flushPara = () => { if (para.length) out.push(`<p>${inline(para.join(" "))}</p>`); para = []; };
     const flushList = () => { if (list) out.push(`<${list.tag}>${list.items.map((i) => `<li>${inline(i)}</li>`).join("")}</${list.tag}>`); list = null; };
     const flushTable = () => {
@@ -87,11 +87,16 @@
     const flushAll = () => { flushPara(); flushList(); flushTable(); };
     for (const line of lines) {
       if (fence !== null) {
-        if (line.trim().startsWith("```")) { out.push(`<pre>${esc(fence.join("\n"))}</pre>`); fence = null; } else fence.push(line);
+        if (line.trim().startsWith("```")) {
+          out.push(fenceLang === "mermaid"
+            ? `<figure class="mermaid-fig cmt-ui" data-src="${esc(fence.join("\n"))}"><pre>${esc(fence.join("\n"))}</pre></figure>`
+            : `<pre>${esc(fence.join("\n"))}</pre>`);
+          fence = null;
+        } else fence.push(line);
         continue;
       }
       const s = line.trim();
-      if (s.startsWith("```")) { flushAll(); fence = []; continue; }
+      if (s.startsWith("```")) { flushAll(); fence = []; fenceLang = s.slice(3).trim().toLowerCase(); continue; }
       if (!s) { flushAll(); continue; }
       let m;
       if ((m = s.match(/^(#{1,6})\s+(.*)$/))) { flushAll(); const n = Math.min(m[1].length + 1, 5); out.push(`<h${n}>${inline(m[2])}</h${n}>`); continue; }
@@ -117,6 +122,44 @@
     if (fence !== null) out.push(`<pre>${esc(fence.join("\n"))}</pre>`);
     flushAll();
     return out.join("\n");
+  }
+
+  // ---------- Mermaid diagrams (vendored library, loaded only when a page has one) ----------
+  let mermaidReady = null;
+  function loadMermaid() {
+    if (!mermaidReady) {
+      mermaidReady = new Promise((resolve, reject) => {
+        const sc = document.createElement("script");
+        sc.src = "vendor/mermaid.min.js";
+        sc.onload = () => resolve(window.mermaid);
+        sc.onerror = () => reject(new Error("mermaid not available"));
+        document.head.appendChild(sc);
+      });
+    }
+    return mermaidReady;
+  }
+
+  async function renderMermaid(root) {
+    const figs = $$(".mermaid-fig:not(.done)", root);
+    if (!figs.length) return;
+    let mermaid;
+    try { mermaid = await loadMermaid(); } catch (_) { return; }
+    const dark = document.documentElement.dataset.theme === "dark" ||
+      (!document.documentElement.dataset.theme && matchMedia("(prefers-color-scheme: dark)").matches);
+    mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: dark ? "dark" : "neutral" });
+    let i = 0;
+    for (const fig of figs) {
+      fig.classList.add("done");
+      try {
+        const { svg } = await mermaid.render(`mmd-${Date.now()}-${i++}`, fig.dataset.src);
+        fig.innerHTML = svg;
+        fig.title = "⤢";
+        fig.onclick = () => modal(`<div class="mermaid-big">${svg}</div><div class="modal-actions"><button class="btn" id="m-cancel">${t("close")}</button></div>`,
+          (m) => { $("#m-cancel", m).onclick = closeModal; });
+      } catch (e) {
+        fig.insertAdjacentHTML("beforeend", `<div class="sub bad">${esc(String(e.message || e).slice(0, 200))}</div>`);
+      }
+    }
   }
 
   // ---------- text mapping for highlights and selections ----------
@@ -343,6 +386,7 @@
       }
       S.msNotes = notes;
       layoutMargin(el);
+      renderMermaid(el).then(() => { if (S.view === "manuscript" && S.msNotes === notes) layoutMargin(el); });
       $("#ms-text").addEventListener("mouseup", (e) => setTimeout(() => captureSelection(e), 0));
       $$("mark.cmt", el).forEach((m) => (m.onclick = (e) => { e.stopPropagation(); openNote(m.dataset.id, true); }));
     }
