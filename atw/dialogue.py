@@ -126,6 +126,10 @@ def parse_heading(heading: str, cfg: WorkbenchConfig, profile: Profile) -> tuple
     return speaker, "agent"
 
 
+class SealKeyMissing(ValueError):
+    """Raised instead of silently creating a second key: two keys would split the truth between tools."""
+
+
 class ModeratorSeal:
     """HMAC-SHA256 seal for human moderator decisions. The key never leaves the author's machine."""
 
@@ -134,6 +138,7 @@ class ModeratorSeal:
         self.profile = profile_for(cfg)
         self.key_path = (
             Path(cfg.key_path).expanduser() if cfg.key_path
+            else Path("<set [agents] key_path>") if cfg.require_key_path
             else Path.home() / ".config" / "agentic-thesis-workbench" / "moderator.key"
         )
 
@@ -161,18 +166,35 @@ class ModeratorSeal:
         msg = f"{file_name}\n{self.canonical_body(lines)}".encode("utf-8")
         return hmac.new(key, msg, hashlib.sha256).hexdigest()
 
+    def status(self) -> dict[str, Any]:
+        return {"enabled": self.enabled, "key_path": str(self.key_path), "key_exists": self.key_path.exists()}
+
+    def require_key(self) -> bytes:
+        """The key used to seal. Never created implicitly: create it once with `atw key init`, or point
+        `[agents] key_path` at the key other tools already use, so every tool verifies the same seals."""
+        k = self._key(create=False)
+        if not k:
+            raise SealKeyMissing(
+                f"No signing key at {self.key_path}. Set [agents] key_path in thesis.toml to the key you already "
+                f"use, or create one with: python3 -m atw key init --workspace <thesis>. Nothing was approved.")
+        return k
+
+    def create_key(self) -> Path:
+        self._key(create=True)
+        return self.key_path
+
     def sign(self, file_name: str, block: str) -> str:
         body = block.rstrip("\n")
         if not self.enabled:
             return body + "\n"
-        k = self._key(create=True)
+        k = self.require_key()
         return f"{body}\n\n<!-- {self.profile.seal_tag}: v1 {self.mac(file_name, body.splitlines(), k)} -->\n"
 
     def sign_payload(self, payload: str) -> str:
         """Seal an arbitrary approval (e.g. an approved text change). Empty when signing is disabled."""
         if not self.enabled:
             return ""
-        return hmac.new(self._key(create=True), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+        return hmac.new(self.require_key(), payload.encode("utf-8"), hashlib.sha256).hexdigest()
 
     def verify_payload(self, payload: str, seal: str) -> bool:
         if not self.enabled:

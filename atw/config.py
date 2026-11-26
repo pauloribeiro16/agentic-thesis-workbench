@@ -70,6 +70,7 @@ class WorkbenchConfig:
     moderator_name: str = "Author"
     sign_decisions: bool = True
     key_path: str = ""
+    require_key_path: bool = False   # true: never fall back to the default key location
 
     # Plugins & quality
     plugin_dirs: list[str] = field(default_factory=lambda: [".thesis/plugins"])
@@ -246,6 +247,7 @@ def load_config(workspace: str | Path) -> WorkbenchConfig:
         setattr(cfg, name, str(ag.get(name, getattr(cfg, name))))
     cfg.roles_dirs = _list(ag.get("roles_dirs"), cfg.roles_dirs)
     cfg.sign_decisions = bool(ag.get("sign_decisions", cfg.sign_decisions))
+    cfg.require_key_path = bool(ag.get("require_key_path", cfg.require_key_path))
     cfg.key_path = cfg.key_path or str(ag.get("key_path", ""))
 
     cfg.plugin_dirs = _list(data.get("plugins", {}).get("dirs"), cfg.plugin_dirs)

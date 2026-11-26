@@ -70,7 +70,9 @@ url = "/thesis/"
 The server binds to 127.0.0.1, rejects requests whose `Host` or `Origin` is not local (DNS-rebinding and
 cross-site protection) and only accepts JSON POSTs. Local plugins in `.thesis/plugins/` are Python code from the
 thesis repository: only enable folders you trust. The signing key lives outside the repository
-(`~/.config/agentic-thesis-workbench/moderator.key` by default, or `[agents] key_path` / `ATW_SIGNING_KEY`).
+(`[agents] key_path`, `ATW_SIGNING_KEY`, or `~/.config/agentic-thesis-workbench/moderator.key`). The workbench
+**never creates a key implicitly** — run `python3 -m atw key init` once — so two tools reading the same files never
+end up with two keys and two versions of what was approved. Set `require_key_path = true` to forbid the default.
 
 ## Documentation
 
@@ -78,3 +80,7 @@ thesis repository: only enable folders you trust. The signing key lives outside 
 - [docs/SCHEMAS.md](docs/SCHEMAS.md) — task, review, comment, ledger and style-guide formats
 - [docs/PLUGINS.md](docs/PLUGINS.md) — writing checks, formats, citation providers and roles
 - [thesis.example.toml](thesis.example.toml) — annotated configuration
+
+## License
+
+MIT — see [LICENSE](LICENSE).

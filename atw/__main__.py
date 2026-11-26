@@ -168,6 +168,9 @@ def main(argv: list[str] | None = None) -> int:
     re_.add_argument("--dest", help="destination folder relative to the workspace")
 
     ws(sub.add_parser("plugins", help="list loaded plugins and checks"))
+    k = sub.add_parser("key", help="signing key for the author's approvals").add_subparsers(dest="sub", required=True)
+    ws(k.add_parser("status"))
+    ws(k.add_parser("init"))
 
     a = p.parse_args(argv)
     w = Path(a.workspace).expanduser().resolve()
@@ -222,6 +225,18 @@ def main(argv: list[str] | None = None) -> int:
             for path in export_roles(cfg, a.to, a.dest):
                 print(f"wrote {path}")
         return 0
+    if a.cmd == "key":
+        from .dialogue import ModeratorSeal
+        seal = ModeratorSeal(cfg)
+        st = seal.status()
+        if a.sub == "init":
+            if st["key_exists"]:
+                print(f"A key already exists at {st['key_path']} — nothing changed.")
+            else:
+                print(f"Created {seal.create_key()} (keep it outside the repository; back it up).")
+            return 0
+        print(f"signing {'on' if st['enabled'] else 'off'} · key {st['key_path']} · {'exists' if st['key_exists'] else 'MISSING'}")
+        return 0 if st["key_exists"] or not st["enabled"] else 1
     if a.cmd == "plugins":
         from .plugins import load_registry
         reg = load_registry(cfg)

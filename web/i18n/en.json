@@ -264,5 +264,8 @@
  "cfg.plan_h": "Chapters, pages, words, sections, narrative and writing rules come from {f}. The workbench has no limits of its own.",
  "cfg.engine": "Workbench (generic)",
  "cfg.no_plan": "No plan file: add [project] plan = \".thesis/plan.toml\" to set your own targets.",
- "cfg.sections": "Sections"
+ "cfg.sections": "Sections",
+ "sign.missing": "Approvals are off: no signing key.",
+ "sign.missing_h": "The workbench never creates a second key, so every tool verifies the same seals. Set [agents] key_path in thesis.toml to the key you already use (expected at {p}), or create one with python3 -m atw key init.",
+ "chg.reseal": "Seal again"
 }

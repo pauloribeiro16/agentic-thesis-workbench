@@ -52,6 +52,7 @@ class Base(unittest.TestCase):
         self.ws = self.tmp / "thesis"
         shutil.copytree(SAMPLE, self.ws)
         self.key = self.tmp / "mod.key"
+        self.key.write_text("0" * 64)
         os.environ["ATW_SIGNING_KEY"] = str(self.key)
 
     def tearDown(self) -> None:
@@ -388,6 +389,47 @@ class TestChangesAndPages(Base):
         checks = {c["id"]: c for c in run_quality_checks(cfg)["chapters"][0]["checks"]}
         self.assertEqual(checks["pages"]["count"], 10)
         self.assertIn("without citations", checks["pages"]["note"])
+
+
+class TestSigningKey(Base):
+    def test_never_creates_a_second_key_silently(self):
+        from atw.dialogue import SealKeyMissing
+        missing = self.tmp / "nope.key"
+        os.environ["ATW_SIGNING_KEY"] = str(missing)
+        dlg = DialogueService(self.cfg())
+        with self.assertRaises(SealKeyMissing):
+            dlg.append_decision("CH1_PLAN.md", "", [{"id": "Q1", "state": "APPROVED"}])
+        self.assertFalse(missing.exists())
+        self.assertNotIn("Moderator Decision", (self.ws / ".thesis/dialogue/CH1_PLAN.md").read_text())
+        srv = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(WorkbenchApp(self.ws)))
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(lambda: (srv.shutdown(), srv.server_close()))
+        c = HTTPConnection("127.0.0.1", srv.server_address[1], timeout=10)
+        c.request("POST", "/api/decide", body=json.dumps({"file": "CH1_PLAN.md", "decisions": [{"id": "Q1", "state": "APPROVED"}]}),
+                  headers={"Content-Type": "application/json", "Host": "127.0.0.1"})
+        r = c.getresponse()
+        self.assertEqual(r.status, 400)
+        self.assertIn("No signing key", json.loads(r.read())["error"])
+
+    def test_require_key_path_ignores_the_default_location(self):
+        os.environ.pop("ATW_SIGNING_KEY", None)
+        toml = (self.ws / "thesis.toml").read_text().replace("sign_decisions = true", "sign_decisions = true\nrequire_key_path = true")
+        self.write("thesis.toml", toml)
+        from atw.dialogue import ModeratorSeal
+        st = ModeratorSeal(self.cfg()).status()
+        self.assertFalse(st["key_exists"])
+        self.assertIn("key_path", st["key_path"])
+
+    def test_two_tools_with_the_same_key_agree(self):
+        p = self.ws / ".thesis/dialogue/CH1_PLAN.md"
+        DialogueService(self.cfg()).append_decision("CH1_PLAN.md", "", [{"id": "Q1", "state": "APPROVED"}])
+        other = load_config(self.ws)  # a second tool reading the same files with the same key
+        q = next(q for q in DialogueService(other).parse_thread(p)["questions"] if q["id"] == "Q1")
+        self.assertEqual((q["state"], q["authenticated"]), ("APPROVED", True))
+        os.environ["ATW_SIGNING_KEY"] = str(self.tmp / "other.key")
+        (self.tmp / "other.key").write_text("1" * 64)
+        q = next(q for q in DialogueService(load_config(self.ws)).parse_thread(p)["questions"] if q["id"] == "Q1")
+        self.assertFalse(q["authenticated"])                # a different key does not see the seal
 
 
 class TestPlanSeparation(Base):

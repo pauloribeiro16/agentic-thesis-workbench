@@ -264,5 +264,8 @@
  "cfg.plan_h": "Capítulos, páginas, palavras, secções, narrativa e regras de escrita vêm de {f}. A bancada não tem limites próprios.",
  "cfg.engine": "Bancada (genérica)",
  "cfg.no_plan": "Sem ficheiro de plano: acrescenta [project] plan = \".thesis/plan.toml\" para definires os teus limites.",
- "cfg.sections": "Secções"
+ "cfg.sections": "Secções",
+ "sign.missing": "Aprovações desligadas: falta a chave de selo.",
+ "sign.missing_h": "A bancada nunca cria uma segunda chave, para todas as ferramentas verificarem os mesmos selos. Põe em [agents] key_path, no thesis.toml, a chave que já usas (procurada em {p}), ou cria uma com python3 -m atw key init.",
+ "chg.reseal": "Selar de novo"
 }

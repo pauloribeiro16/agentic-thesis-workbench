@@ -215,3 +215,5 @@ details.narrative p { margin: 6px 0 4px; font: 14px/1.55 var(--serif); }
 .q-mark.ins { background: var(--st-fechado-soft); color: var(--fg); }
 .q-diff summary { cursor: pointer; }
 @media (max-width: 900px) { .q-cols { grid-template-columns: 1fr; } }
+
+.banner { margin-bottom: 16px; font-size: 14px; }

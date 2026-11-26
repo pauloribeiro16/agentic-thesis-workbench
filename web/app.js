@@ -214,6 +214,11 @@
     S.view = view;
     $$(".view").forEach((v) => { v.hidden = v.id !== `view-${view}`; });
     syncSub(view);
+    const sg = S.state.signing || {};
+    let banner = $("#sign-banner");
+    if (!banner) { banner = document.createElement("div"); banner.id = "sign-banner"; $("#app").prepend(banner); }
+    banner.innerHTML = sg.enabled && !sg.key_exists && ["overview", "queue", "decisions", "manuscript"].includes(view)
+      ? `<div class="card alert banner"><b>${t("sign.missing")}</b> ${t("sign.missing_h", { p: `<code class="mono">${esc(sg.key_path)}</code>` })}</div>` : "";
     const fn = { overview: renderOverview, manuscript: renderManuscript, queue: renderQueue, decisions: renderDecisions,
       quality: renderQuality, literature: renderLiterature, agents: renderAgents, config: renderConfig }[view];
     try { await fn(param, params); } catch (err) { $(`#view-${view}`).innerHTML = `<div class="card"><h2>${t("error")}</h2><p>${esc(err.message)}</p></div>`; }
@@ -417,6 +422,7 @@
     const acts = [];
     if (!it.registered) {
       if (v === "pending") acts.push(["approved", t("chg.approve"), "primary"], ["rejected", t("chg.reject")]);
+      else if (it.status === "approved" && !it.sealed) acts.push(["approved", t("chg.reseal"), "primary"], ["pending", t("chg.undo")]);
       else if (v === "review") acts.push(["kept", t("chg.keep"), "primary"], ["contested", t("chg.contest")]);
       else if (inText) acts.push(["undo", t("chg.undo")]);
       else acts.push(["pending", t("chg.undo")]);

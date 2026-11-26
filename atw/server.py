@@ -18,7 +18,7 @@ from .changes import ChangeService
 from .citations import CitationService
 from .comments import CommentService
 from .config import WorkbenchConfig, load_config
-from .dialogue import NEED_STATES, DialogueService
+from .dialogue import NEED_STATES, DialogueService, ModeratorSeal
 from .formats import get_adapter
 from .pages import pdf_path, record_compile, thesis_budgets
 from .plugins import load_registry
@@ -100,6 +100,7 @@ class WorkbenchApp:
             "etag": self.etag(),
             "host_shell": self.host_shell,
             "config": cfg.to_public_dict(),
+            "signing": ModeratorSeal(cfg).status(),
             "stats": {
                 "chapters": len(chapters),
                 "total_words": sum(c.words for c in chapters),
