@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "key": "knuth1984",
+      "chapter": 1,
+      "claim": "Structured documentation improves reproducibility.",
+      "verdict": "supports"
+    }
+  ]
+}

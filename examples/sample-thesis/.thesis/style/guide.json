@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "note": "Approved style and terminology conventions.",
+  "entries": [
+    {
+      "thread": "CH1_PLAN.md",
+      "q": "Q1",
+      "kind": "Term",
+      "title": "Life-cycle hyphenation",
+      "options": {
+        "Option A": {
+          "preferred": "life-cycle",
+          "variants": ["lifecycle", "life cycle"]
+        }
+      }
+    }
+  ]
+}

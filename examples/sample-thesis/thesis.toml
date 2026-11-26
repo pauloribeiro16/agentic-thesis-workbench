@@ -1,0 +1,30 @@
+[project]
+title = "Sample Doctoral Dissertation"
+author = "Jane Researcher"
+language = "en-GB"
+
+[format]
+adapter = "markdown"
+chapters_glob = "chapters/*.md"
+compiler = "none"
+word_targets = { default = [200, 1000] }
+
+[citations]
+provider = "bibtex"
+bib_file = "references.bib"
+library_dir = "LITERATURE"
+syntax = "author-year"
+ledger_file = ".thesis/citations/ledger.json"
+
+[agents]
+dialogue_dir = ".thesis/dialogue"
+proposals_file = ".thesis/proposals/proposals.json"
+comments_dir = ".thesis/comments"
+style_guide_file = ".thesis/style/guide.json"
+moderator_name = "Jane"
+sign_decisions = true
+
+[quality]
+max_sentence_words = 40
+forbid_first_person = true
+spelling_variant = "en-GB"
