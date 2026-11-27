@@ -15,7 +15,7 @@ import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-PARTS = ("atw", "web", "docs", "README.md", "LICENSE", "thesis.example.toml")
+PARTS = ("atw", "web", "docs", "README.md", "LICENSE", "thesis.example.toml", ".gitignore")
 DEFAULT_DIR = "agentic-thesis-workbench"
 
 
