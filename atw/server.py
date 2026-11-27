@@ -242,6 +242,58 @@ class WorkbenchApp:
                     pass
         return info
 
+    def work_folder(self, cfg: WorkbenchConfig, key: str) -> Path | None:
+        lit = self.literature()
+        e = next((x for x in lit["entries"] if x["key"] == key), None)
+        if not e or not e.get("library_dir"):
+            return None
+        f = (cfg.workspace / e["library_dir"]).resolve()
+        return f if cfg.workspace in f.parents and f.is_dir() else None
+
+    def work(self, key: str) -> dict[str, Any] | None:
+        """One work: its entry and checks, the author's summary, full text, and every place the thesis cites it."""
+        cfg = self.cfg()
+        lit = self.literature()
+        e = next((x for x in lit["entries"] if x["key"] == key), None)
+        if not e:
+            return None
+        folder = self.work_folder(cfg, key)
+        out: dict[str, Any] = {"entry": e, "summary": "", "full_text": "", "full_text_chars": 0, "pdfs": []}
+        if folder:
+            notes = sorted(folder.glob("00_*.md"))
+            if notes:
+                out["summary"] = notes[0].read_text(encoding="utf-8", errors="ignore")
+            ft = folder / "full_text.md"
+            if ft.is_file():
+                text = ft.read_text(encoding="utf-8", errors="ignore")
+                out["full_text_chars"] = len(text)
+                out["full_text"] = text[:300_000]
+            out["pdfs"] = [p.name for p in sorted(folder.glob("*.pdf"))]
+        from .citations import CitationIndex
+        idx = CitationIndex(CitationService(cfg))
+        ad = get_adapter(cfg)
+        uses = []
+        for c in ad.discover_chapters(include_content=True):
+            for sec in c.sections:
+                for u in idx.uses_in(sec.rel_path, sec.content):
+                    if u["key"] == key:
+                        uses.append({**u, "chapter": c.number})
+        rows = []
+        for r in idx.ledger:
+            if r.get("key") != key:
+                continue
+            state = idx.passage_state(r)
+            passage = ""
+            if state == "ok":
+                src = idx._source_text(r["source"])
+                passage = src[int(r["start"]):int(r["end"])]
+            rows.append({"file": r.get("file", ""), "claim": r.get("claim", ""), "cite": r.get("cite", ""),
+                         "page": r.get("page"), "verdict": r["verdict"], "state": state, "passage": passage[:2000],
+                         "note": (r.get("agent") or {}).get("note", "") or r.get("note", "")})
+        out["uses"] = uses
+        out["ledger"] = rows
+        return out
+
     def context(self, num: int) -> dict[str, Any]:
         """Instructions, memories and constraints for one chapter, read from files the thesis lists in [context]."""
         import re as _re
@@ -443,6 +495,17 @@ def make_handler(app: WorkbenchApp):
                     return self._send(pdf.read_bytes(), "application/pdf")
                 if path == "/api/agents":
                     return self._json(app.agents())
+                if path == "/api/work":
+                    key = qs.get("key", [""])[0]
+                    w = app.work(key)
+                    return self._json(w) if w else self._json({"error": "work not found"}, HTTPStatus.NOT_FOUND)
+                if path == "/api/work/pdf":
+                    key, name = qs.get("key", [""])[0], qs.get("file", [""])[0]
+                    folder = app.work_folder(app.cfg(), key)
+                    f = (folder / name).resolve() if folder and name else None
+                    if not f or folder not in f.parents or f.suffix.lower() != ".pdf" or not f.is_file():
+                        return self._json({"error": "no PDF"}, HTTPStatus.NOT_FOUND)
+                    return self._send(f.read_bytes(), "application/pdf")
                 if path.startswith("/api/context/"):
                     raw = path.rsplit("/", 1)[-1]
                     return self._json(app.context(int(raw))) if raw.isdigit() else self._json({"error": "chapter?"}, HTTPStatus.BAD_REQUEST)

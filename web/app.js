@@ -31,7 +31,10 @@
     const r = await fetch(path, opts);
     let data = {};
     try { data = await r.json(); } catch (_) {}
-    if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+    if (!r.ok) {
+      const msg = data.error || `HTTP ${r.status}`;
+      throw new Error(msg.startsWith("No signing key") ? t("sign.missing_toast") : msg);
+    }
     return data;
   }
 
@@ -66,16 +69,30 @@
   function closeModal() { $$(".modal-wrap").forEach((m) => m.remove()); }
 
   // ---------- Markdown rendering (subset; text preserved so comment anchors can be found) ----------
+  // Like esc(), but keeps HTML entities the author already wrote (&amp; &nbsp; &#8212;) as entities.
+  const escText = (v) => esc(v).replace(/&amp;((?:[a-z]{2,8}|#\d{2,5}|#x[0-9a-f]{2,4});)/gi, "&$1");
+
   function inline(s) {
-    return esc(s)
+    return escText(s)
       .replace(/`([^`\n]+)`/g, "<code>$1</code>")
       .replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>")
       .replace(/\*([^*\n]+)\*/g, "<em>$1</em>")
       .replace(/\[@([\w:.\-]+)\]/g, '<span class="cite-pill">@$1</span>')
       .replace(/\(([A-ZÀ-Ý][^()]*?(?:19|20)\d{2}[a-z]?[^()]*)\)/g, '(<span class="cite-pill">$1</span>)');
   }
+  // A safe subset of inline HTML that theses use inside Markdown (tables, highlights, emphasis). Every other tag
+  // stays escaped; attributes are dropped except numeric colspan/rowspan.
+  const SAFE_TAG = /<(\/?)(table|thead|tbody|tfoot|tr|td|th|caption|mark|span|u|em|strong|b|i|br|sub|sup|small|code)\b([^>]*)>/gi;
+  const BLOCK_LINE = /^<\/?(table|thead|tbody|tfoot|tr|td|th|caption)\b/i;
+
   function renderMd(raw) {
-    const lines = String(raw || "").replace(/<!--[\s\S]*?-->/g, (m) => m.replace(/[^\n]/g, "")).split("\n");
+    const tags = [];
+    const protect = (str) => str.replace(SAFE_TAG, (_, slash, name, attrs) => {
+      const keep = slash ? "" : [...String(attrs).matchAll(/\b(colspan|rowspan)\s*=\s*"?(\d{1,2})"?/gi)].map((m) => ` ${m[1].toLowerCase()}="${m[2]}"`).join("");
+      tags.push(`<${slash}${name.toLowerCase()}${keep}>`);
+      return `\u0003${tags.length - 1}\u0004`;
+    });
+    const lines = protect(String(raw || "").replace(/<!--[\s\S]*?-->/g, (m) => m.replace(/[^\n]/g, ""))).split("\n");
     const out = [];
     let para = [], list = null, table = null, fence = null, fenceLang = "";
     const flushPara = () => { if (para.length) out.push(`<p>${inline(para.join(" "))}</p>`); para = []; };
@@ -97,6 +114,9 @@
       }
       const s = line.trim();
       if (s.startsWith("```")) { flushAll(); fence = []; fenceLang = s.slice(3).trim().toLowerCase(); continue; }
+      if (/^\u0003\d+\u0004/.test(s) && BLOCK_LINE.test(tags[Number(s.match(/^\u0003(\d+)/)[1])] || "")) {
+        flushAll(); out.push(`<div class="html-line">${inline(s)}</div>`.replace(/^<div class="html-line">|<\/div>$/g, "")); continue;
+      }
       if (!s) { flushAll(); continue; }
       let m;
       if ((m = s.match(/^(#{1,6})\s+(.*)$/))) { flushAll(); const n = Math.min(m[1].length + 1, 5); out.push(`<h${n}>${inline(m[2])}</h${n}>`); continue; }
@@ -121,7 +141,9 @@
     }
     if (fence !== null) out.push(`<pre>${esc(fence.join("\n"))}</pre>`);
     flushAll();
-    return out.join("\n");
+    const restore = (h) => h.replace(/\u0003(\d+)\u0004/g, (_, n) => tags[Number(n)] || "");
+    // inside code fences the protected tags go back to their escaped text form
+    return restore(out.join("\n").replace(/(<pre>[\s\S]*?<\/pre>)/g, (m) => m.replace(/\u0003(\d+)\u0004/g, (_, n) => esc(tags[Number(n)] || ""))));
   }
 
   // ---------- Mermaid diagrams (vendored library, loaded only when a page has one) ----------
@@ -1020,14 +1042,16 @@
             }).join("")}</td></tr>`).join("")}
         </tbody></table></div>`;
     }
+    const keepY = window.scrollY;
     el.innerHTML = `
-      <div class="page-head"><div><h1>${t("ql.title")}</h1><div class="sub">${t("ql.sub")}</div></div>
+      <div class="page-head ql-head"><div><h1>${t("ql.title")}</h1><div class="sub">${t("ql.sub")}</div></div>
         <div class="toolbar"><div class="seg big">${levels}</div>
-          ${level !== "thesis" ? `<select id="ql-ch">${chs.map((c) => `<option value="${c.chapter}"${c.chapter === pick ? " selected" : ""}>${t("ch")} ${c.chapter} — ${esc(c.title)} (${c.summary.bad}✕ ${c.summary.warn}!)</option>`).join("")}</select>` : ""}
-          ${level !== "section" ? `<label class="chk"><input type="checkbox" id="ql-only" ${S.qlOnly ? "checked" : ""}> ${t("ql.only_problems")}</label>` : ""}
+          <select id="ql-ch" style="visibility:${level === "thesis" ? "hidden" : "visible"}">${chs.map((c) => `<option value="${c.chapter}"${c.chapter === pick ? " selected" : ""}>${t("ch")} ${c.chapter} — ${esc(c.title)} (${c.summary.bad}✕ ${c.summary.warn}!)</option>`).join("")}</select>
+          <label class="chk" style="visibility:${level === "section" ? "hidden" : "visible"}"><input type="checkbox" id="ql-only" ${S.qlOnly ? "checked" : ""}> ${t("ql.only_problems")}</label>
           <button class="btn sm" id="ql-refresh">↻</button></div></div>
       ${q.plugin_errors.length ? `<div class="card alert"><h2>${t("ql.plugin_errors")}</h2>${q.plugin_errors.map((e) => `<div class="mono">${esc(e)}</div>`).join("")}</div>` : ""}
       ${body}`;
+    window.scrollTo(0, keepY);
     $$("[data-level]", el).forEach((b) => (b.onclick = () => { S.qlLevel = b.dataset.level; renderQuality(String(pick)); }));
     const sel = $("#ql-ch", el); if (sel) sel.onchange = (e) => { S.qlChapter = Number(e.target.value); renderQuality(e.target.value); };
     const only = $("#ql-only", el); if (only) only.onchange = (e) => { S.qlOnly = e.target.checked; renderQuality(String(pick)); };
@@ -1047,8 +1071,9 @@
   // ---------- Literature ----------
   // Three different verifications, never merged into one number: the seal (files unchanged since sealing),
   // the source match (the archived source is the work of the entry) and verified passages (sentence by sentence).
-  async function renderLiterature(_, params) {
+  async function renderLiterature(param, params) {
     const el = $("#view-literature");
+    if (param) return renderWork(el, decodeURIComponent(param));
     if (params?.get("q")) S.litFilter.q = params.get("q");
     if (!S.literature) { el.innerHTML = `<div class="empty">${t("loading")}</div>`; S.literature = await api("api/literature"); }
     const d = S.literature, sm = d.summary || {}, q = S.litFilter.q.toLowerCase(), stf = S.litFilter.status;
@@ -1069,12 +1094,56 @@
         <select id="lit-st">${opts.map(([k, l]) => `<option value="${k}"${stf === k ? " selected" : ""}>${l}</option>`).join("")}</select></div>
       <div class="card">${rows.length ? `<table class="table"><thead><tr><th>${t("lit.key")}</th><th>${t("title")}</th><th>${t("lit.seal")}</th><th>${t("lit.match")}</th><th>${t("lit.passages")}</th></tr></thead><tbody>
         ${rows.slice(0, 400).map((e) => `<tr><td class="mono">${esc(e.key)}<div class="sub">${esc(e.author || "—")} (${esc(e.year || "n.d.")})</div></td>
-          <td>${esc(e.title || "—")}<div class="sub">${esc(e.venue || "")}</div></td>
+          <td><a href="#literature/${encodeURIComponent(e.key)}">${esc(e.title || "—")}</a><div class="sub">${esc(e.venue || "")}</div></td>
           <td>${e.seal ? pill(SE[e.seal], t(`lit.s.${e.seal}`)) : "—"}</td>
           <td>${pill(M[e.match] || "aberto", t(`lit.m.${e.match}`))}${e.match_score != null ? `<div class="sub mono">${e.match_score}</div>` : ""}</td>
           <td class="mono">${e.verified_passages || 0}</td></tr>`).join("")}</tbody></table>` : `<div class="empty">—</div>`}</div>`;
     $("#lit-q").oninput = (e) => { S.litFilter.q = e.target.value; renderLiterature().then(() => { const n = $("#lit-q"); n.focus(); n.setSelectionRange(n.value.length, n.value.length); }); };
     $("#lit-st").onchange = (e) => { S.litFilter.status = e.target.value; renderLiterature(); };
+  }
+
+  async function renderWork(el, key) {
+    el.innerHTML = `<div class="empty">${t("loading")}</div>`;
+    let w;
+    try { w = await api(`api/work?key=${encodeURIComponent(key)}`); } catch (e) { el.innerHTML = `<div class="card"><p>${esc(e.message)}</p></div>`; return; }
+    const e = w.entry, tab = S.workTab || "uses";
+    const M = { confirmed: "fechado", doubtful: "espera", mismatch: "bloqueado", no_text: "aberto", no_source: "aberto" };
+    const V = { supports: "fechado", partial: "espera", does_not_support: "bloqueado", unverified: "aberto" };
+    const tabs = [["uses", `${t("work.uses")} (${w.uses.length})`], ["summary", t("work.summary")], ["text", t("work.text")], ["pdf", "PDF"]];
+    let body = "";
+    if (tab === "uses") {
+      const byCh = {};
+      w.uses.forEach((u) => (byCh[u.chapter] = byCh[u.chapter] || []).push(u));
+      body = (w.uses.length ? Object.entries(byCh).map(([ch, us]) => `<h3>${t("ch")} ${ch}</h3>${us.map((u) => {
+        const ev = w.ledger.filter((r) => r.file === u.file && r.claim && u.text.includes(r.claim.slice(0, 40)));
+        return `<div class="use"><div class="use-head">${u.verified ? pill("fechado", t("work.verified")) : u.problem ? pill("bloqueado", t("work.problem")) : pill("aberto", t("work.not_verified"))}
+            <a class="mono sub" href="#manuscript/${ch}">${esc(u.file.split("/").pop())}:${u.line}</a></div>
+          <div class="use-text">${renderMd(u.text)}</div>
+          ${ev.map((r) => `<div class="passage"><div class="k">${t("work.passage")}${r.page ? ` · p. ${esc(r.page)}` : ""} · ${pill(V[r.verdict] || "aberto", t(`work.v.${r.verdict}`))}${r.state !== "ok" ? ` <span class="tag bad">${esc(r.state)}</span>` : ""}</div>
+            ${r.passage ? `<blockquote>${esc(r.passage)}</blockquote>` : ""}${r.note ? `<div class="sub">${esc(r.note)}</div>` : ""}</div>`).join("")}</div>`;
+      }).join("")}`).join("") : `<div class="empty">${t("work.not_cited")}</div>`)
+        + (w.ledger.length ? `<details class="q-diff"><summary class="k">${t("work.all_passages", { n: w.ledger.length })}</summary>${w.ledger.map((r) =>
+          `<div class="passage"><div class="sub mono">${esc(r.file)} · ${pill(V[r.verdict] || "aberto", t(`work.v.${r.verdict}`))}</div><div class="use-text">${esc(r.claim)}</div>${r.passage ? `<blockquote>${esc(r.passage)}</blockquote>` : ""}</div>`).join("")}</details>` : "");
+    } else if (tab === "summary") {
+      body = w.summary ? `<div class="prose small">${renderMd(w.summary)}</div>` : `<div class="empty">${t("work.no_summary")}</div>`;
+    } else if (tab === "text") {
+      body = w.full_text ? `<div class="sub">${fmt(w.full_text_chars)} ${t("work.chars")}${w.full_text_chars > w.full_text.length ? " · " + t("work.truncated") : ""}</div><div class="prose small fulltext">${renderMd(w.full_text)}</div>`
+        : `<div class="empty">${t("work.no_text")}</div>`;
+    } else {
+      body = w.pdfs.length ? w.pdfs.map((f) => `<div class="pdf-bar"><span class="mono sub">${esc(f)}</span>
+          <a class="btn sm" target="_blank" rel="noopener" href="api/work/pdf?key=${encodeURIComponent(key)}&file=${encodeURIComponent(f)}">${t("pdf.open")}</a></div>
+          <iframe class="pdf-frame" src="api/work/pdf?key=${encodeURIComponent(key)}&file=${encodeURIComponent(f)}#view=FitH" title="PDF"></iframe>`).join("")
+        : `<div class="empty">${t("work.no_pdf")}</div>`;
+    }
+    el.innerHTML = `
+      <div class="page-head"><div><a class="sub" href="#literature">← ${t("lit.title")}</a>
+        <h1 class="work-title">${esc(e.title || e.key)}</h1>
+        <div class="sub">${esc(e.author || "—")} (${esc(e.year || "n.d.")}) · ${esc(e.venue || "")} · <span class="mono">${esc(e.key)}</span>${e.doi ? ` · <a href="https://doi.org/${encodeURIComponent(e.doi)}" target="_blank" rel="noopener">DOI</a>` : ""}</div>
+        <div class="work-pills">${e.seal ? pill(e.seal === "intact" ? "fechado" : "bloqueado", `${t("lit.seal")}: ${t(`lit.s.${e.seal}`)}`) : ""}
+          ${pill(M[e.match] || "aberto", `${t("lit.match")}: ${t(`lit.m.${e.match}`)}${e.match_score != null ? ` (${e.match_score})` : ""}`)}
+          ${pill(e.verified_passages ? "fechado" : "aberto", `${t("lit.passages")}: ${e.verified_passages || 0}`)}</div></div></div>
+      <div class="card"><div class="seg big" style="margin-bottom:12px">${tabs.map(([k, l]) => `<button class="${tab === k ? "on" : ""}" data-wtab="${k}">${esc(l)}</button>`).join("")}</div>${body}</div>`;
+    $$("[data-wtab]", el).forEach((b) => (b.onclick = () => { S.workTab = b.dataset.wtab; renderWork(el, key); }));
   }
 
   // ---------- Agents ----------
