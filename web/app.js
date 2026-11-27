@@ -211,6 +211,52 @@
     return true;
   }
 
+  // Highlight many passages in one pass: one text map per section, then wrap from the end backwards so the
+  // node offsets of earlier passages stay valid. Returns the set of ids that were found.
+  function highlightMany(root, items) {
+    const found = new Set();
+    if (!items.length) return found;
+    const { text, map } = textMap(root);
+    const segs = [];
+    for (const it of items) {
+      const q = norm(it.plain);
+      if (!q) continue;
+      let at = text.indexOf(q);
+      if (at < 0) at = text.indexOf(q.slice(0, Math.min(80, q.length)));
+      if (at < 0) continue;
+      found.add(it.id);
+      const end = Math.min(at + q.length, map.length);
+      const per = new Map();
+      for (let i = at; i < end; i++) {
+        const m = map[i];
+        if (!m) continue;
+        const seg = per.get(m[0]) || [m[1], m[1]];
+        seg[0] = Math.min(seg[0], m[1]); seg[1] = Math.max(seg[1], m[1]);
+        per.set(m[0], seg);
+      }
+      for (const [node, [a, b]] of per) segs.push({ node, a, b, id: it.id, cls: it.cls, order: at });
+    }
+    // later text first; within a node, larger offsets first
+    const nodeIndex = new Map();
+    map.forEach((m) => { if (m && !nodeIndex.has(m[0])) nodeIndex.set(m[0], nodeIndex.size); });
+    segs.sort((x, y) => (nodeIndex.get(y.node) - nodeIndex.get(x.node)) || (y.a - x.a));
+    const used = new Map();
+    for (const sg of segs) {
+      const u = used.get(sg.node) || [];
+      if (u.some(([a, b]) => sg.a <= b && sg.b >= a)) continue;   // overlapping passages: keep the first wrapped
+      u.push([sg.a, sg.b]); used.set(sg.node, u);
+      const range = document.createRange();
+      try {
+        range.setStart(sg.node, sg.a); range.setEnd(sg.node, sg.b + 1);
+        const mark = document.createElement("mark");
+        mark.className = `cmt ${sg.cls}`;
+        mark.dataset.id = sg.id;
+        range.surroundContents(mark);
+      } catch (_) {}
+    }
+    return found;
+  }
+
   // ---------- navigation ----------
   function route() {
     const raw = location.hash.replace(/^#\/?/, "");
@@ -347,7 +393,7 @@
           <div class="sub">${t("ms.narrative_src", { f: esc(S.state.config.plan.file) })}</div></details>` : ""}</div>
         <div class="toolbar">
           <select id="ms-ch">${chapters.map((c) => `<option value="${c.number}"${c.number === n ? " selected" : ""}>${t("ch")} ${c.number} — ${esc(c.title)}</option>`).join("")}</select>
-          <div class="seg big"><button class="${pdfMode ? "" : "on"}" data-mode="text">${t("ms.mode_text")}</button><button class="${pdfMode ? "on" : ""}" data-mode="pdf">${t("ms.mode_pdf")}</button></div>
+          <div class="seg big">${["text", "pdf", "context"].map((m) => `<button class="${(S.msMode || "text") === m ? "on" : ""}" data-mode="${m}">${t("ms.mode_" + m)}</button>`).join("")}</div>
           <div class="seg big"><button class="${showClosed ? "" : "on"}" data-f="active">${t("ms.filter_active")}</button><button class="${showClosed ? "on" : ""}" data-f="all">${t("ms.filter_all")}</button></div>
           <details class="menu"><summary class="btn">${t("ms.agents_menu")} ▾</summary><div class="menu-list">
             <button class="btn" data-task="close-comments">${t("ms.ask_agents")}</button>
@@ -356,7 +402,10 @@
         </div></div>
       <div class="ms-counts sub">${t("ms.counts", { c: openC, x: openX, tc: comments.length, tx: changes.length })} · ${t("ms.select_hint")}</div>`;
 
-    if (pdfMode) {
+    if (S.msMode === "context") {
+      el.innerHTML = head + `<div class="card ctx-card" id="ctx-card"><div class="empty">${t("loading")}</div></div>`;
+      renderContext(el, n);
+    } else if (pdfMode) {
       el.innerHTML = head + `<div class="ms-grid">${pdfPanel(ch)}
         <aside class="ms-side"><div class="card sticky"><div class="sub" style="margin-bottom:8px">${t("ms.pdf_comments_hint")}</div>
           ${[...shownC.map(commentCard), ...shownX.map(changeCard)].join("") || `<div class="empty">${t("ms.no_comments")}</div>`}</div></aside></div>`;
@@ -370,20 +419,25 @@
           <aside class="ms-margin" id="ms-margin"></aside>
         </div>
         <div class="sel-pop cmt-ui" id="sel-bar" hidden><button class="btn primary" data-act="new-comment">${t("ms.comment")} <kbd>C</kbd></button><button class="btn" data-act="new-suggest">${t("ms.suggest")} <kbd>S</kbd></button></div>`;
-      const notes = [];
+      const notes = [], bySec = new Map();
+      const want = (file, item) => { if (!bySec.has(file)) bySec.set(file, []); bySec.get(file).push(item); };
       for (const it of shownX) {
-        if (it.anchor?.state !== "exact" || !it.anchor.plain) { notes.push({ id: it.id, html: changeCard(it), orphan: true, closed: !OPEN_CHANGE(it) }); continue; }
-        const sec = $(`.ms-sec[data-file="${CSS.escape(it.file)}"]`, el);
-        const ok = sec && highlight(sec, it.anchor.plain, it.id, `chg v-${it.verdict}${OPEN_CHANGE(it) ? "" : " closed"}`);
-        notes.push({ id: it.id, html: changeCard(it), orphan: !ok, closed: !OPEN_CHANGE(it) });
+        const meta = { who: it.id, snip: it.desc || it.new || it.old || "", cls: `v-${it.verdict}` };
+        const n0 = { id: it.id, html: changeCard(it), closed: !OPEN_CHANGE(it), ...meta };
+        notes.push(n0);
+        if (it.anchor?.state === "exact" && it.anchor.plain) want(it.file, { id: it.id, plain: it.anchor.plain, cls: `chg v-${it.verdict}${n0.closed ? " closed" : ""}` });
       }
       for (const c of shownC) {
         const closed = CLOSED.has(c.status);
-        if (!c.anchor || c.anchor.state === "orphan") { notes.push({ id: c.id, html: commentCard(c), orphan: true, closed }); continue; }
-        const sec = $(`.ms-sec[data-file="${CSS.escape(c.file)}"]`, el);
-        const ok = sec && highlight(sec, c.anchor.plain, c.id, `k-${c.kind || "note"} s-${c.status}${closed ? " closed" : ""}`);
-        notes.push({ id: c.id, html: commentCard(c), orphan: !ok, closed });
+        notes.push({ id: c.id, html: commentCard(c), closed, who: (c.author || "").split(" ")[0], snip: c.text || c.quote || "", cls: `k-${c.kind || "note"}` });
+        if (c.anchor && c.anchor.state !== "orphan") want(c.file, { id: c.id, plain: c.anchor.plain, cls: `k-${c.kind || "note"} s-${c.status}${closed ? " closed" : ""}` });
       }
+      const found = new Set();
+      for (const [file, items] of bySec) {
+        const sec = $(`.ms-sec[data-file="${CSS.escape(file)}"]`, el);
+        if (sec) highlightMany(sec, items).forEach((id) => found.add(id));
+      }
+      notes.forEach((x) => { x.orphan = !found.has(x.id); });
       S.msNotes = notes;
       layoutMargin(el);
       renderMermaid(el).then(() => { if (S.view === "manuscript" && S.msNotes === notes) layoutMargin(el); });
@@ -402,13 +456,20 @@
     bindChangeActions(el);
   }
 
-  // Margin notes: each note sits next to the line it refers to; overlapping notes are pushed down.
-  // On narrow screens the note goes right after its paragraph instead.
+  // Margin notes: one quiet line per note next to the text it refers to (click to open the full card).
+  // On narrow screens, a small marker under each paragraph opens that paragraph's notes.
+  function noteHtml(x) {
+    const open = S.openNotes.has(x.id);
+    return `<div class="mnote ${open ? "open" : "collapsed"} ${x.closed ? "is-closed" : ""}" data-note="${esc(x.id)}">
+      ${open ? x.html : `<div class="mline"><span class="mdot ${esc(x.cls)}"></span><b>${esc(x.who)}</b><span class="msnip">${esc(x.snip.slice(0, 140))}</span></div>`}</div>`;
+  }
+
   function layoutMargin(el) {
     const flow = $("#ms-flow", el), margin = $("#ms-margin", el), text = $("#ms-text", el);
     if (!flow || !margin) return;
     S.openNotes = S.openNotes || new Set();
-    $$(".inline-note", el).forEach((x) => x.remove());
+    S.openBlocks = S.openBlocks || new Set();
+    $$(".inline-notes", el).forEach((x) => x.remove());
     const narrow = flow.clientWidth < 900;
     flow.classList.toggle("narrow", narrow);
     margin.innerHTML = "";
@@ -417,35 +478,70 @@
       const m = $(`mark.cmt[data-id="${CSS.escape(x.id)}"]`, text);
       return { ...x, mark: m, top: m ? m.getBoundingClientRect().top - flow.getBoundingClientRect().top : 0 };
     }).sort((a, b) => a.top - b.top);
-    const noteHtml = (x) => `<div class="mnote ${S.openNotes.has(x.id) ? "" : "collapsed"} ${x.closed ? "is-closed" : ""}" data-note="${esc(x.id)}">${x.html}</div>`;
     if (narrow) {
+      const groups = new Map();
       for (const x of placed) {
-        const block = x.mark?.closest("p,li,table,blockquote,h1,h2,h3,h4,h5") || x.mark;
-        if (block) block.insertAdjacentHTML("afterend", `<div class="inline-note cmt-ui">${noteHtml(x)}</div>`);
+        const block = x.mark?.closest("p,li,table,blockquote,h1,h2,h3,h4,h5,figure") || x.mark;
+        if (!block) continue;
+        if (!groups.has(block)) groups.set(block, []);
+        groups.get(block).push(x);
       }
-      if (orphans.length) text.insertAdjacentHTML("afterbegin", `<div class="inline-note cmt-ui"><div class="k">${t("ms.orphans")}</div>${orphans.map(noteHtml).join("")}</div>`);
+      let gi = 0;
+      for (const [block, list] of groups) {
+        const key = `${S.activeChapter}:${gi++}`;
+        const open = S.openBlocks.has(key) || list.some((x) => S.openNotes.has(x.id));
+        const nOpen = list.filter((x) => !x.closed).length;
+        block.insertAdjacentHTML("afterend", `<div class="inline-notes cmt-ui ${open ? "open" : ""}" data-block="${key}">
+          <button class="note-chip" data-chip="${key}">💬 ${nOpen}${list.length > nOpen ? ` <span class="muted">+${list.length - nOpen}</span>` : ""}</button>
+          ${open ? `<div class="inline-list">${list.map(noteHtml).join("")}</div>` : ""}</div>`);
+      }
+      if (orphans.length) text.insertAdjacentHTML("afterbegin", `<div class="inline-notes cmt-ui open"><div class="k">${t("ms.orphans")}</div><div class="inline-list">${orphans.map(noteHtml).join("")}</div></div>`);
+      $$("[data-chip]", el).forEach((b) => (b.onclick = () => {
+        const k = b.dataset.chip;
+        if (S.openBlocks.has(k)) S.openBlocks.delete(k); else S.openBlocks.add(k);
+        layoutMargin(el);
+      }));
     } else {
       margin.innerHTML = (orphans.length ? `<div class="m-orphans"><div class="k">${t("ms.orphans")}</div>${orphans.map(noteHtml).join("")}</div>` : "")
         + placed.map((x) => noteHtml(x).replace('class="mnote', `style="top:${Math.round(x.top)}px" class="placed mnote`)).join("");
       let bottom = orphans.length ? $(".m-orphans", margin).offsetHeight + 12 : 0;
       for (const node of $$(".mnote.placed", margin)) {
-        const want = parseFloat(node.style.top);
-        const top = Math.max(want, bottom);
+        const top = Math.max(parseFloat(node.style.top), bottom);
         node.style.top = `${top}px`;
-        bottom = top + node.offsetHeight + 8;
+        bottom = top + node.offsetHeight + 4;
       }
       margin.style.minHeight = `${Math.max(bottom, text.offsetHeight)}px`;
     }
-    $$(".mnote", el).forEach((node) => node.addEventListener("click", (e) => {
-      if (e.target.closest("button, a, textarea, input")) return;
-      openNote(node.dataset.note, !S.openNotes.has(node.dataset.note) || false);
-    }));
     $$(".mnote", el).forEach((node) => {
+      node.addEventListener("click", (e) => {
+        if (e.target.closest("button, a, textarea, input, select")) return;
+        openNote(node.dataset.note, !S.openNotes.has(node.dataset.note));
+      });
       node.addEventListener("mouseenter", () => $$(`mark.cmt[data-id="${CSS.escape(node.dataset.note)}"]`, el).forEach((m) => m.classList.add("hot")));
       node.addEventListener("mouseleave", () => $$("mark.cmt.hot", el).forEach((m) => m.classList.remove("hot")));
     });
     bindCommentActions(el, S.activeChapter);
     bindChangeActions(el);
+  }
+
+  // ---------- Context: instructions, memories and constraints of the chapter ----------
+  async function renderContext(el, n) {
+    const box = $("#ctx-card", el);
+    S.ctx = S.ctx || {};
+    if (!S.ctx[n]) S.ctx[n] = await api(`api/context/${n}`);
+    const docs = S.ctx[n].docs;
+    if (!docs.length) { box.innerHTML = `<div class="empty">${t("ctx.none")}</div>`; return; }
+    const pick = Math.min(S.ctxPick?.[n] ?? 0, docs.length - 1);
+    const group = { plan: t("ctx.plan"), chapter: t("ctx.chapter"), memory: t("ctx.memory"), thesis: t("ctx.thesis") };
+    let last = "";
+    box.innerHTML = `<div class="ctx-grid"><nav class="ctx-nav">${docs.map((d, i) => {
+      const g = d.kind !== last ? `<div class="k">${group[d.kind] || d.kind}</div>` : "";
+      last = d.kind;
+      return `${g}<button class="${i === pick ? "on" : ""}" data-doc="${i}">${esc(d.title)}</button>`;
+    }).join("")}</nav>
+      <div class="ctx-doc"><div class="sub mono">${esc(docs[pick].path || "")}</div><div class="prose small">${renderMd(docs[pick].content)}</div></div></div>`;
+    $$("[data-doc]", box).forEach((b) => (b.onclick = () => { S.ctxPick = { ...(S.ctxPick || {}), [n]: Number(b.dataset.doc) }; renderContext(el, n); }));
+    renderMermaid(box);
   }
 
   function openNote(id, open) {
@@ -629,6 +725,7 @@
 
   async function afterChange() {
     S.chapter = {};
+    S.quality = null;
     S.queue = null;
     await refreshState();
     await render();
@@ -872,45 +969,78 @@
     }));
   }
 
-  // ---------- Quality ----------
+  // ---------- Quality: three levels — thesis (macro), chapter, section (micro) ----------
+  function qlRows(list, chNum) {
+    const shown = list.filter((c) => !S.qlOnly || c.state !== "ok");
+    if (!shown.length) return `<div class="empty">✓</div>`;
+    return `<table class="table ql"><thead><tr><th>${t("ql.group")}</th><th>${t("ql.check")}</th><th>${t("ql.status")}</th><th>${t("ql.count")}</th><th></th></tr></thead><tbody>
+      ${shown.map((c) => `<tr class="ql-row" data-id="${esc(c.id)}"><td class="muted">${esc(c.group)}</td>
+        <td><b>${esc(S.dict[`check.${c.id}`] || c.label)}</b><div class="sub">${esc(c.rule)}${c.note ? ` — ${esc(c.note)}` : ""}</div></td>
+        <td>${qlPill(c.state)}</td><td class="mono">${c.state === "na" && !c.count ? "—" : fmt(c.count)}</td>
+        <td class="nowrap">${c.state === "na" && (c.pack === "agent-review" || c.id === "thesis_narrative") ? `<button class="btn sm" data-review="${esc(c.id)}">${t("ql.request")}</button>` : ""}</td></tr>
+        ${c.items.length ? `<tr class="ql-items" hidden><td colspan="5">${c.items.map((it) => `<div class="ql-item"><span class="mono">${esc(it.file)}${it.line ? ":" + it.line : ""}</span>
+          ${it.detail ? `<b>${esc(it.detail)}</b>` : ""}<div class="sub">${esc(it.text)}</div></div>`).join("")}</td></tr>` : ""}`).join("")}
+    </tbody></table>`;
+  }
+
   async function renderQuality(param) {
     const el = $("#view-quality");
-    el.innerHTML = `<div class="empty">${t("loading")}</div>`;
-    S.quality = await api("api/quality");
-    const q = S.quality;
-    const chs = q.chapters;
+    if (!S.quality || param === "refresh") { el.innerHTML = `<div class="empty">${t("loading")}</div>`; S.quality = await api("api/quality"); }
+    const q = S.quality, chs = q.chapters;
+    const level = S.qlLevel || "thesis";
     const pick = Number(param) || S.qlChapter || (chs[0] && chs[0].chapter);
     S.qlChapter = pick;
     const ch = chs.find((c) => c.chapter === pick);
-    const rows = (list) => {
-      const shown = list.filter((c) => !S.qlOnly || c.state !== "ok");
-      if (!shown.length) return `<div class="empty">✓</div>`;
-      return `<table class="table ql"><thead><tr><th>${t("ql.group")}</th><th>${t("ql.check")}</th><th>${t("ql.status")}</th><th>${t("ql.count")}</th><th></th></tr></thead><tbody>
-        ${shown.map((c) => `<tr class="ql-row" data-id="${esc(c.id)}"><td class="muted">${esc(c.group)}</td>
-          <td><b>${esc(S.dict[`check.${c.id}`] || c.label)}</b><div class="sub">${esc(c.rule)}${c.note ? ` — ${esc(c.note)}` : ""}</div></td>
-          <td>${qlPill(c.state)}</td><td class="mono">${c.state === "na" && !c.count ? "—" : fmt(c.count)}</td>
-          <td class="nowrap">${c.pack === "agent-review" && c.state === "na" && ch ? `<button class="btn sm" data-review="${esc(c.id)}">${t("ql.request")}</button>` : ""}</td></tr>
-          ${c.items.length ? `<tr class="ql-items" hidden><td colspan="5">${c.items.map((it) => `<div class="ql-item"><span class="mono">${esc(it.file)}${it.line ? ":" + it.line : ""}</span>
-            ${it.detail ? `<b>${esc(it.detail)}</b>` : ""}<div class="sub">${esc(it.text)}</div></div>`).join("")}</td></tr>` : ""}`).join("")}
-      </tbody></table>`;
-    };
+    const budgets = Object.fromEntries(S.state.chapters.map((c) => [c.number, c.budget || {}]));
+    const levels = ["thesis", "chapter", "section"].map((l) => `<button class="${level === l ? "on" : ""}" data-level="${l}">${t("ql.level." + l)}</button>`).join("");
+    let body = "";
+    if (level === "thesis") {
+      body = `<div class="card"><h2>${t("ql.level.thesis")}</h2><div class="sub" style="margin:-6px 0 10px">${t("ql.thesis_h")}</div>${qlRows(q.thesis_checks)}</div>
+        <div class="card"><h2>${t("ql.by_chapter")}</h2><table class="table"><thead><tr><th>${t("ch")}</th><th>${t("title")}</th><th>${t("pg.pages")}</th>
+          <th>${t("ql.state.bad")}</th><th>${t("ql.state.warn")}</th><th>${t("ql.state.na")}</th></tr></thead><tbody>
+          ${chs.map((c) => { const b = budgets[c.chapter] || {};
+            return `<tr class="ql-ch" data-ch="${c.chapter}"><td class="mono">${c.chapter}</td><td><a href="#quality/${c.chapter}">${esc(c.title)}</a></td>
+              <td class="mono">${b.estimate_now != null ? `${num1(b.estimate_now)} / ${b.target ? b.target[1] : "—"}` : "—"}</td>
+              <td>${c.summary.bad ? pill("bloqueado", c.summary.bad) : "0"}</td><td>${c.summary.warn ? pill("espera", c.summary.warn) : "0"}</td><td class="muted">${c.summary.na}</td></tr>`; }).join("")}
+          </tbody></table></div>`;
+    } else if (level === "chapter" && ch) {
+      body = `<div class="card"><h2>${t("ql.chapter")} ${ch.chapter}: ${esc(ch.title)} <span class="muted mono">${fmt(ch.words)} ${t("words")}</span></h2>${qlRows(ch.checks, ch.chapter)}</div>`;
+    } else if (ch) {
+      const groups = [...new Set(ch.checks.map((c) => c.group))].filter((g) => ch.sections.some((s) => s.problems[g]));
+      body = `<div class="card"><h2>${t("ql.level.section")} — ${t("ch")} ${ch.chapter}: ${esc(ch.title)}</h2><div class="sub" style="margin:-6px 0 10px">${t("ql.section_h")}</div>
+        <table class="table ql-sec"><thead><tr><th>${t("ql.section")}</th><th>${t("words")}</th><th>%</th><th>${t("ql.cites_k")}</th>
+          ${groups.map((g) => `<th>${esc(g)}</th>`).join("")}</tr></thead><tbody>
+          ${ch.sections.map((s) => `<tr class="ql-srow" data-path="${esc(s.path)}"><td><b>${esc(s.title)}</b><div class="sub mono">${esc(s.path.split("/").pop())}</div></td>
+            <td class="mono">${fmt(s.words)}</td><td class="mono">${Math.round(s.share * 100)}%<div class="bar"><i style="width:${Math.min(100, Math.round(s.share * 100 * 2))}%"></i></div></td>
+            <td class="mono">${s.citations_per_1000}</td>
+            ${groups.map((g) => { const x = s.problems[g]; return `<td>${!x ? "·" : x.bad ? pill("bloqueado", x.bad + (x.warn ? ` +${x.warn}` : "")) : pill("espera", x.warn)}</td>`; }).join("")}</tr>
+            <tr class="ql-sitems" hidden><td colspan="${4 + groups.length}">${ch.checks.filter((c) => c.state === "warn" || c.state === "bad").map((c) => {
+              const its = c.items.filter((i) => i.file === s.path);
+              return its.length ? `<div class="ql-item"><b>${esc(S.dict[`check.${c.id}`] || c.label)}</b> ${qlPill(c.state)}${its.slice(0, 12).map((i) => `<div class="sub"><span class="mono">:${i.line}</span> ${esc(i.detail || "")} — ${esc(i.text)}</div>`).join("")}</div>` : "";
+            }).join("")}</td></tr>`).join("")}
+        </tbody></table></div>`;
+    }
     el.innerHTML = `
       <div class="page-head"><div><h1>${t("ql.title")}</h1><div class="sub">${t("ql.sub")}</div></div>
-        <div class="toolbar"><label class="chk"><input type="checkbox" id="ql-only" ${S.qlOnly ? "checked" : ""}> ${t("ql.only_problems")}</label>
-          <select id="ql-ch">${chs.map((c) => `<option value="${c.chapter}"${c.chapter === pick ? " selected" : ""}>${t("ch")} ${c.chapter} — ${esc(c.title)} (${c.summary.bad}✕ ${c.summary.warn}!)</option>`).join("")}</select></div></div>
+        <div class="toolbar"><div class="seg big">${levels}</div>
+          ${level !== "thesis" ? `<select id="ql-ch">${chs.map((c) => `<option value="${c.chapter}"${c.chapter === pick ? " selected" : ""}>${t("ch")} ${c.chapter} — ${esc(c.title)} (${c.summary.bad}✕ ${c.summary.warn}!)</option>`).join("")}</select>` : ""}
+          ${level !== "section" ? `<label class="chk"><input type="checkbox" id="ql-only" ${S.qlOnly ? "checked" : ""}> ${t("ql.only_problems")}</label>` : ""}
+          <button class="btn sm" id="ql-refresh">↻</button></div></div>
       ${q.plugin_errors.length ? `<div class="card alert"><h2>${t("ql.plugin_errors")}</h2>${q.plugin_errors.map((e) => `<div class="mono">${esc(e)}</div>`).join("")}</div>` : ""}
-      ${ch ? `<div class="card"><h2>${t("ql.chapter")} ${ch.chapter}: ${esc(ch.title)} <span class="muted mono">${fmt(ch.words)} ${t("words")}</span></h2>${rows(ch.checks)}</div>` : ""}
-      <div class="card"><h2>${t("ql.thesis")}</h2>${rows(q.thesis_checks)}</div>`;
-    $("#ql-ch").onchange = (e) => { location.hash = `#quality/${e.target.value}`; };
-    $("#ql-only").onchange = (e) => { S.qlOnly = e.target.checked; renderQuality(String(pick)); };
-    $$(".ql-row", el).forEach((r) => (r.onclick = (e) => {
+      ${body}`;
+    $$("[data-level]", el).forEach((b) => (b.onclick = () => { S.qlLevel = b.dataset.level; renderQuality(String(pick)); }));
+    const sel = $("#ql-ch", el); if (sel) sel.onchange = (e) => { S.qlChapter = Number(e.target.value); renderQuality(e.target.value); };
+    const only = $("#ql-only", el); if (only) only.onchange = (e) => { S.qlOnly = e.target.checked; renderQuality(String(pick)); };
+    $("#ql-refresh", el).onclick = () => renderQuality("refresh");
+    $$(".ql-ch", el).forEach((r) => (r.onclick = (e) => { e.preventDefault(); S.qlLevel = "chapter"; S.qlChapter = Number(r.dataset.ch); renderQuality(r.dataset.ch); }));
+    $$(".ql-row, .ql-srow", el).forEach((r) => (r.onclick = (e) => {
       if (e.target.closest("button")) return;
       const nxt = r.nextElementSibling;
-      if (nxt && nxt.classList.contains("ql-items")) nxt.hidden = !nxt.hidden;
+      if (nxt && (nxt.classList.contains("ql-items") || nxt.classList.contains("ql-sitems"))) nxt.hidden = !nxt.hidden;
     }));
     $$("[data-review]", el).forEach((b) => (b.onclick = () => {
-      const role = { narrative: "narrative-reviewer", tone: "tone-reviewer", consistency: "consistency-checker" }[b.dataset.review];
-      createTask({ role, chapter: pick });
+      const role = { narrative: "narrative-reviewer", tone: "tone-reviewer", consistency: "consistency-checker", thesis_narrative: "thesis-narrative-reviewer" }[b.dataset.review];
+      createTask(b.dataset.review === "thesis_narrative" ? { role } : { role, chapter: pick });
     }));
   }
 
@@ -1064,7 +1194,7 @@
       const selecting = window.getSelection && !window.getSelection().isCollapsed;
       if (etag !== S.etag && !$(".modal-wrap") && !selecting && !S.busy && !$(".menu[open]")) {
         S.busy = true;
-        S.chapter = {}; S.queue = null; S.literature = null;
+        S.chapter = {}; S.queue = null; S.literature = null; S.quality = null; S.ctx = {};
         await refreshState();
         await render();
         S.busy = false;

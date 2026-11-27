@@ -432,6 +432,19 @@ class TestSigningKey(Base):
         self.assertFalse(q["authenticated"])                # a different key does not see the seal
 
 
+class TestCache(Base):
+    def test_answers_from_memory_and_refreshes_when_a_file_changes(self):
+        app = WorkbenchApp(self.ws)
+        first = app.state()
+        self.assertIs(app.state(), first)                      # same object: answered from memory
+        time.sleep(0.01)
+        f = self.ws / "chapters" / "01_introduction.md"
+        f.write_text(f.read_text() + "\nOne more sentence with several new words.\n")
+        second = app.state()
+        self.assertIsNot(second, first)
+        self.assertGreater(second["stats"]["total_words"], first["stats"]["total_words"])
+
+
 class TestPlanSeparation(Base):
     def test_engine_has_no_limits_of_its_own(self):
         ws = self.tmp / "bare"

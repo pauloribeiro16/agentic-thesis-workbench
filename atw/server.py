@@ -62,25 +62,84 @@ class WorkbenchApp:
         self.workspace = Path(workspace).expanduser().resolve()
         self.host_shell = host_shell
         self.jobs: dict[int, dict[str, Any]] = {}
+        self._cache: dict[str, tuple[str, Any]] = {}
         self._jobs_lock = threading.Lock()
 
     def cfg(self) -> WorkbenchConfig:
         return load_config(self.workspace)
 
     def etag(self) -> str:
+        """Fingerprint of every file the pages depend on (stat only, a few milliseconds)."""
         cfg = self.cfg()
         h = hashlib.sha256(str(self.workspace).encode("utf-8"))
-        dirs = [cfg.dialogue_dir, cfg.comments_dir, cfg.tasks_dir, cfg.reviews_dir]
-        paths = [self.workspace / "thesis.toml", self.workspace / cfg.style_guide_file,
-                 self.workspace / cfg.proposals_file]
-        paths += [p for d in dirs if (self.workspace / d).is_dir() for p in (self.workspace / d).iterdir()]
-        paths += get_adapter(cfg).files()
-        for p in sorted(paths):
-            if p.exists():
-                h.update(f"{p}:{p.stat().st_mtime_ns}".encode())
+        h.update(json.dumps({k: v.get("running") for k, v in self.jobs.items()}).encode())
+        ws = self.workspace
+        files = [ws / "thesis.toml", ws / cfg.style_guide_file, ws / cfg.proposals_file, ws / cfg.ledger_file,
+                 ws / ".thesis" / "pages.json"]
+        for rel in (cfg.plan_file, cfg.bib_file, cfg.csl_file, str(cfg.raw.get("citations", {}).get("integrity_manifest", ""))):
+            if rel:
+                files.append(ws / rel)
+        dirs = [cfg.dialogue_dir, cfg.comments_dir, cfg.tasks_dir, cfg.reviews_dir] + list(cfg.plugin_dirs) + list(cfg.roles_dirs)
+        for d in dirs:
+            if (ws / d).is_dir():
+                files += list((ws / d).iterdir())
+        if cfg.library_dir and (ws / cfg.library_dir).is_dir():
+            files.append(ws / cfg.library_dir)
+        files += get_adapter(cfg).files()
+        for tmpl in (cfg.pages_pdf, cfg.pages_aux):
+            if tmpl and "{chapter}" in tmpl:
+                parent = (ws / tmpl).parent
+                if parent.is_dir():
+                    files += [f for f in parent.iterdir() if f.suffix in (".pdf", ".aux", ".json")]
+        for f in sorted(set(files)):
+            try:
+                st = f.stat()
+                h.update(f"{f}:{st.st_mtime_ns}:{st.st_size}".encode())
+            except OSError:
+                pass
         return h.hexdigest()[:16]
 
+    def cached(self, key: str, fn) -> Any:
+        """Answer from memory while no input changed; recompute when the fingerprint moves."""
+        tag = self.etag()
+        hit = self._cache.get(key)
+        if hit and hit[0] == tag:
+            return hit[1]
+        value = fn()
+        self._cache[key] = (tag, value)
+        return value
+
+    def warm(self) -> None:
+        """Recompute every page in the background so requests are answered from memory."""
+        try:
+            self.cached("state", self._state)
+            self.cached("queue", self._queue)
+            st = self._cache["state"][1]
+            for c in st["chapters"]:
+                self.cached(f"chapter:{c['number']}", lambda n=c["number"]: self._chapter(n))
+            self.cached("quality", lambda: run_quality_checks(self.cfg()))
+            self.cached("literature", self._literature)
+        except Exception:
+            pass
+
+    def start_warmer(self, interval: float = 1.0) -> None:
+        def loop() -> None:
+            last = ""
+            while True:
+                try:
+                    tag = self.etag()
+                    if tag != last:
+                        self.warm()
+                        last = tag
+                except Exception:
+                    pass
+                time.sleep(interval)
+        threading.Thread(target=loop, daemon=True).start()
+
     def state(self) -> dict[str, Any]:
+        return self.cached("state", self._state)
+
+    def _state(self) -> dict[str, Any]:
         cfg = self.cfg()
         adapter = get_adapter(cfg)
         chapters = adapter.discover_chapters(include_content=True)
@@ -134,6 +193,11 @@ class WorkbenchApp:
 
     def queue(self, cfg: WorkbenchConfig | None = None) -> dict[str, Any]:
         """Everything waiting for the author to close: comments and change proposals."""
+        if cfg is None:
+            return self.cached("queue", self._queue)
+        return self._queue(cfg)
+
+    def _queue(self, cfg: WorkbenchConfig | None = None) -> dict[str, Any]:
         cfg = cfg or self.cfg()
         q = CommentService(cfg).queue()
         for it in q["items"]:
@@ -178,7 +242,61 @@ class WorkbenchApp:
                     pass
         return info
 
+    def context(self, num: int) -> dict[str, Any]:
+        """Instructions, memories and constraints for one chapter, read from files the thesis lists in [context]."""
+        import re as _re
+        cfg = self.cfg()
+        ad = get_adapter(cfg)
+        srcs = ad.sources_for(num)
+        ch_dir = str(srcs[0].parent.relative_to(cfg.workspace)) if srcs else ""
+        out: list[dict[str, Any]] = []
+
+        def read(rel: str) -> str | None:
+            f = (cfg.workspace / rel).resolve()
+            if cfg.workspace not in f.parents or not f.is_file():
+                return None
+            return f.read_text(encoding="utf-8", errors="ignore")
+
+        fill = lambda t: t.format(chapter=num, chapter_dir=ch_dir, dialogue_dir=cfg.dialogue_dir)
+        spec = cfg.spec(num)
+        if spec:
+            lines = [f"- **{k}:** {v}" for k, v in spec.items() if k != "narrative"]
+            out.append({"kind": "plan", "title": cfg.plan_file or "plan", "path": cfg.plan_file,
+                        "content": (spec.get("narrative", "") + "\n\n" + "\n".join(lines)).strip()})
+        for rel in cfg.context_chapter_files:
+            rel = fill(rel)
+            text = read(rel)
+            if text is None:
+                continue
+            if rel.startswith(cfg.dialogue_dir.rstrip("/") + "/"):
+                th = DialogueService(cfg).parse_thread(cfg.workspace / rel)
+                qs = th["questions"]
+                rows = ["| # | Questão | Estado | Selada |", "|---|---|---|---|"] + [
+                    f"| {q['id']} | {q['title'].replace('|', '/')} | {q['state']} | {'sim' if q['authenticated'] else ''} |"
+                    for q in qs]
+                last = th["turns"][-3:]
+                text = (f"{len(qs)} questões, {sum(1 for q in qs if q['needs_author'])} à espera do autor.\n\n" + "\n".join(rows)
+                        + "\n\n" + "\n\n".join(f"### {t['heading']}\n\n{t['md'][:1500]}" for t in reversed(last)))
+            out.append({"kind": "chapter", "title": Path(rel).name, "path": rel, "content": text})
+        pats = [rf"\bCap(?:ítulo|\.)?\s*{num}\b", rf"\bChapter\s+{num}\b", rf"\bCH{num}\b", rf"\bCaps?\.\s*(?:\d+\s*(?:,|e|a|–|-)\s*)*{num}\b"]
+        for rel in cfg.context_memory_files:
+            text = read(fill(rel))
+            if not text:
+                continue
+            blocks = _re.split(r"(?m)^(?=## )", text)
+            hits = [b.strip() for b in blocks if b.startswith("## ") and any(_re.search(p, b, _re.I) for p in pats)]
+            if hits:
+                out.append({"kind": "memory", "title": Path(rel).name, "path": fill(rel), "content": "\n\n".join(hits[::-1])})
+        for rel in cfg.context_thesis_files:
+            text = read(fill(rel))
+            if text is not None:
+                out.append({"kind": "thesis", "title": Path(rel).name, "path": fill(rel), "content": text})
+        return {"chapter": num, "docs": out}
+
     def chapter(self, num: int) -> dict[str, Any] | None:
+        return self.cached(f"chapter:{num}", lambda: self._chapter(num))
+
+    def _chapter(self, num: int) -> dict[str, Any] | None:
         cfg = self.cfg()
         adapter = get_adapter(cfg)
         all_ch = adapter.discover_chapters(include_content=True)
@@ -195,6 +313,9 @@ class WorkbenchApp:
         return None
 
     def literature(self) -> dict[str, Any]:
+        return self.cached("literature", self._literature)
+
+    def _literature(self) -> dict[str, Any]:
         cfg = self.cfg()
         svc = CitationService(cfg)
         entries = svc.load_entries()
@@ -306,7 +427,9 @@ def make_handler(app: WorkbenchApp):
                     return self._json(app.literature())
                 if path == "/api/quality":
                     ch = qs.get("chapter", [""])[0]
-                    return self._json(run_quality_checks(app.cfg(), only_chapter=int(ch) if ch.isdigit() else None))
+                    if ch.isdigit():
+                        return self._json(run_quality_checks(app.cfg(), only_chapter=int(ch)))
+                    return self._json(app.cached("quality", lambda: run_quality_checks(app.cfg())))
                 if path == "/api/queue":
                     return self._json(app.queue())
                 if path == "/api/compile":
@@ -320,6 +443,9 @@ def make_handler(app: WorkbenchApp):
                     return self._send(pdf.read_bytes(), "application/pdf")
                 if path == "/api/agents":
                     return self._json(app.agents())
+                if path.startswith("/api/context/"):
+                    raw = path.rsplit("/", 1)[-1]
+                    return self._json(app.context(int(raw))) if raw.isdigit() else self._json({"error": "chapter?"}, HTTPStatus.BAD_REQUEST)
                 if path.startswith("/api/chapter/"):
                     raw = path.rsplit("/", 1)[-1]
                     ch = app.chapter(int(raw)) if raw.isdigit() else None
@@ -385,6 +511,7 @@ def make_handler(app: WorkbenchApp):
 
 def run_server(workspace: str | Path, port: int = 8765, host_shell: str = "standalone") -> None:
     app = WorkbenchApp(workspace=workspace, host_shell=host_shell)
+    app.start_warmer()
     server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(app))
     print(f"Agentic Thesis Workbench at http://127.0.0.1:{port} (mode={host_shell})\nWorkspace: {app.workspace}")
     try:

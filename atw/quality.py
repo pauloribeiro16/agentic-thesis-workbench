@@ -188,7 +188,21 @@ def run_quality_checks(cfg: WorkbenchConfig, chapters: list[ChapterDoc] | None =
         if only_chapter is not None and ch.number != only_chapter:
             continue
         checks = [run(s, ch) for s in specs if s.scope == "chapter"]
-        reports.append({"chapter": ch.number, "title": ch.title, "words": ch.words, "checks": checks,
+        sec_rows = []
+        for sd in ch.sections:
+            counts: dict[str, dict[str, int]] = {}
+            for c in checks:
+                n = sum(1 for it in c["items"] if it.get("file") == sd.rel_path)
+                if n and c["state"] in ("warn", "bad"):
+                    g = counts.setdefault(c["group"], {"warn": 0, "bad": 0})
+                    g[c["state"]] += n
+            cites = sum(1 for u in ctx.citation_uses.get(ch.number, []) if u["file"] == sd.rel_path)
+            heading = next((l.lstrip("# ").strip() for l in sd.content.splitlines() if l.startswith("#")), sd.filename)
+            sec_rows.append({"path": sd.rel_path, "title": heading, "words": sd.words,
+                             "share": round(sd.words / ch.words, 3) if ch.words else 0,
+                             "citations_per_1000": round(1000 * cites / sd.words, 1) if sd.words else 0,
+                             "problems": counts})
+        reports.append({"chapter": ch.number, "title": ch.title, "words": ch.words, "checks": checks, "sections": sec_rows,
                         "summary": {k: sum(1 for c in checks if c["state"] == k) for k in ("bad", "warn", "na", "error")}})
     return {
         "packs": cfg.quality_packs,

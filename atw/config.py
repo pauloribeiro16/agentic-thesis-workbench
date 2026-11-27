@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 DEFAULT_EXCLUDE = [".git", ".thesis", "node_modules", "__pycache__"]
-DEFAULT_PACKS = ["core", "citations", "style", "governance", "agent-review"]
+DEFAULT_PACKS = ["core", "citations", "style", "governance", "agent-review", "thesis-level"]
 
 
 @dataclass
@@ -82,6 +82,12 @@ class WorkbenchConfig:
     prohibited_phrases: list[str] = field(default_factory=list)
     emphasis_words: list[str] = field(default_factory=list)
     quality_options: dict[str, Any] = field(default_factory=dict)  # [quality.options] for plugins
+    # Context shown with each chapter (instructions, memories, constraints). Placeholders: {chapter}, {chapter_dir},
+    # {dialogue_dir}. memory_files are searched for entries ("## ..." blocks) that mention the chapter.
+    context_chapter_files: list[str] = field(default_factory=list)
+    context_thesis_files: list[str] = field(default_factory=list)
+    context_memory_files: list[str] = field(default_factory=list)
+
     # The author's plan
     plan_file: str = ""
     plan: dict[str, Any] = field(default_factory=dict)              # raw plan file, to show what is "yours"
@@ -251,6 +257,10 @@ def load_config(workspace: str | Path) -> WorkbenchConfig:
     cfg.key_path = cfg.key_path or str(ag.get("key_path", ""))
 
     cfg.plugin_dirs = _list(data.get("plugins", {}).get("dirs"), cfg.plugin_dirs)
+    ctxc = data.get("context", {}) if isinstance(data.get("context"), dict) else {}
+    cfg.context_chapter_files = _list(ctxc.get("chapter_files"), cfg.context_chapter_files)
+    cfg.context_thesis_files = _list(ctxc.get("thesis_files"), cfg.context_thesis_files)
+    cfg.context_memory_files = _list(ctxc.get("memory_files"), cfg.context_memory_files)
 
     # The author's chapters: [chapter_defaults] and [[chapters]] (pages, words, sections, narrative, ...)
     defaults = data.get("chapter_defaults", {}) if isinstance(data.get("chapter_defaults"), dict) else {}

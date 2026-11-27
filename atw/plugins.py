@@ -34,6 +34,7 @@ BUILTIN_MODULES = (
     "atw.builtin.checks_pages",
     "atw.builtin.checks_governance",
     "atw.builtin.checks_agent_review",
+    "atw.builtin.checks_macro",
 )
 
 
