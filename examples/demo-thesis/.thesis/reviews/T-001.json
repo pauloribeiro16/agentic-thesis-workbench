@@ -1,0 +1,25 @@
+{
+  "task": "T-001",
+  "kind": "proposals",
+  "role": "proposal-drafter",
+  "agent": {
+    "name": "Claude Code",
+    "model": "Opus 5.5"
+  },
+  "proposals": [
+    {
+      "comment_id": "C-3c97d1fe",
+      "file": "chapters/01_Introduction.md",
+      "quote": "We believe this work makes a really significant contribution to the field. ",
+      "replacement": "",
+      "rationale": "The next sentence already states the three contributions; this one adds only emphasis."
+    },
+    {
+      "comment_id": "C-dd893945",
+      "file": "chapters/01_Introduction.md",
+      "quote": "The gap this thesis addresses is therefore not the lack of sensors or the lack of models, but the lack of a scheduling method that stays useful when the data are incomplete and the parameters are unknown.",
+      "replacement": "The gap this thesis addresses is therefore not the lack of sensors or the lack of models, but the lack of a scheduling method that treats sensor quality as an input and learns the soil's response from incomplete data — the two open challenges of §2.5.",
+      "rationale": "Ties the problem statement to the two challenges that close Chapter 2."
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+# Jane's plan for this thesis — her choices, not engine defaults (demo data).
+
+[chapter_defaults]
+pages = [4, 8]            # small, because this is a demo; a real thesis would set e.g. [20, 25]
+words = [900, 2000]
+
+[[chapters]]
+number = 1
+title = "Introduction"
+pages = [2, 4]
+words = [500, 1000]
+narrative = """Context, problem, research question and objectives. Promises nothing that Chapters 3–4 do not deliver. Written last."""
+
+[[chapters]]
+number = 2
+title = "Background"
+narrative = """Soil-water balance, low-cost sensing and existing schedulers. State of the art only; ends on the two open challenges that Chapter 3 addresses."""
+
+[[chapters]]
+number = 3
+title = "Method"
+narrative = """The three-stage method: sensor quality, online drainage estimation, irrigation decision. Each stage says what it takes in and what it gives out."""
+
+[[chapters]]
+number = 4
+title = "Evaluation"
+narrative = """Paired-plot field evaluation on three farms over two seasons. Reports water use and yield side by side, including the failed plot-season."""
+
+[[chapters]]
+number = 5
+title = "Conclusion"
+pages = [1, 3]
+words = [300, 900]
+narrative = """Answers the research question with the numbers from Chapter 4 and states the limits honestly."""
+
+[quality]
+max_sentence_words = 35
+forbid_first_person = true
+prohibited_phrases = ["significant contribution", "significant gap"]
+emphasis_words = ["really", "crucial", "pivotal", "robust", "seamless", "leverage"]

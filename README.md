@@ -21,10 +21,77 @@ A local, model-agnostic web workbench for writing a thesis with several AI agent
 - **Interface in English or Portuguese** (`[ui] locale`); data, files and code stay in English.
 - **Standalone or embedded** behind a host portal (`--host-shell second-brain`).
 
+## Feature tour
+
+The screenshots below come from [`examples/demo-thesis`](examples/demo-thesis), a small fictional thesis
+(*Adaptive Irrigation Scheduling from Low-Cost Soil Sensors*) whose comments, agent tasks and sealed approvals were
+produced through the workbench itself. Run it yourself:
+
+```bash
+ATW_SIGNING_KEY=examples/demo-thesis/.thesis/demo-signing.key python3 -m atw serve --workspace examples/demo-thesis
+```
+
+### Overview: what is waiting for you
+
+Comments to close, decisions to register, questions waiting for the author and approvals an agent tried to write
+itself, next to every chapter's size and the questions that need you.
+
+![Overview](docs/screenshots/overview.png)
+
+### Manuscript: read and comment on the text
+
+Each chapter renders with its citations as links to the bibliography. Select a passage and press `C` to comment or
+`S` to suggest a change; the chapter's argument from your plan is one click away.
+
+![Manuscript](docs/screenshots/manuscript.png)
+
+### Comments answered by agents, with before/after
+
+An agent answers a comment with a concrete edit, shown word by word. Accepting it seals it with your key; the agent
+and the task that produced it stay on record.
+
+![Comment thread](docs/screenshots/comment-thread.png)
+
+### To close: one queue for everything you must decide
+
+Agent answers and change proposals side by side, before and after in context, with keyboard shortcuts to accept,
+reopen or reject.
+
+![To close](docs/screenshots/to-close.png)
+
+### Decisions and dialogue between agents
+
+Agents discuss open questions in Markdown threads and propose states (consensus, deadlock, reserved for you). Click
+a question to see only its history and the parts of each turn about it. Only your sealed decision approves; an
+approval an agent wrote itself is flagged and never counts.
+
+![Decisions](docs/screenshots/decision-question.png)
+
+### Quality checks that name their rule
+
+Checks come from plugins and are reported per thesis, chapter and section — no global score. Every limit comes from
+your plan; an unset rule reports "not configured".
+
+![Quality](docs/screenshots/quality.png)
+
+### Literature: is the archived source the work you cite?
+
+For each entry: whether the archived text matches the bibliography entry, whether its files are sealed, and how many
+sentences were checked against the cited passage.
+
+![Literature](docs/screenshots/literature.png)
+
+### Agents: roles, tasks and validated reviews
+
+Roles are templates any agent can run (Claude Code, Gemini CLI, Codex, …). A task is a JSON packet; the agent's
+output is validated before it can touch comments or proposals.
+
+![Agents](docs/screenshots/agents.png)
+
 ## Quick start
 
 ```bash
-python3 -m atw serve --workspace examples/sample-thesis      # http://127.0.0.1:8765
+python3 -m atw serve --workspace examples/sample-thesis      # http://127.0.0.1:8765 (minimal; the demo thesis is above)
 python3 -m atw init  --workspace /path/to/your-thesis        # thesis.toml, .thesis/, AGENTS.md
 python3 -m atw check --workspace /path/to/your-thesis        # quality checks in the terminal
 ```

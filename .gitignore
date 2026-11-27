@@ -3,3 +3,5 @@ __pycache__/
 .pytest_cache/
 .DS_Store
 *.key
+# The demo thesis ships its own throwaway key so its sealed decisions verify. Never do this in a real thesis.
+!examples/demo-thesis/.thesis/demo-signing.key

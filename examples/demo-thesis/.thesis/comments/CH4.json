@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "chapter": 4,
+  "comments": [
+    {
+      "id": "C-0286d8b8",
+      "file": "chapters/04_Evaluation.md",
+      "quote": "between 18 % and 31 % less water",
+      "prefix": "eld was weighed at harvest.\n\n## 4.2 Water use\n\nAcross the six plot-seasons, the adaptive plots used ",
+      "suffix": " than the calendar plots. The largest savings came early in the season, when the calendar irrigated ",
+      "pos": 524,
+      "author": "Jane",
+      "date": "2026-11-27T17:21:36",
+      "kind": "note",
+      "text": "Add the per-farm numbers as a table.",
+      "status": "open",
+      "replies": [],
+      "history": [
+        {
+          "date": "2026-11-27T17:21:36",
+          "by": "Jane",
+          "status": "open"
+        }
+      ]
+    }
+  ]
+}

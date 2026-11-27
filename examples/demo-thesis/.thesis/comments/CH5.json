@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "chapter": 5,
+  "comments": [
+    {
+      "id": "C-1a237780",
+      "file": "chapters/05_Conclusion.md",
+      "quote": "Two directions follow.",
+      "prefix": "ages during flowering remain a risk that the safety margin only partly covers.\n\n## 5.3 Future work\n\n",
+      "suffix": " The first is to share drainage curves between neighbouring plots, so that a plot whose sensors fail",
+      "pos": 790,
+      "author": "Jane",
+      "date": "2026-11-27T17:21:36",
+      "kind": "suggest",
+      "text": "Shorter opening.",
+      "status": "approved",
+      "replies": [],
+      "history": [
+        {
+          "date": "2026-11-27T17:21:36",
+          "by": "Jane",
+          "status": "open"
+        }
+      ],
+      "proposal": {
+        "quote": "Two directions follow.",
+        "replacement": "Two directions remain open.",
+        "rationale": "Shorter opening.",
+        "by": "Jane",
+        "approved_by": "Jane",
+        "approved_at": "2026-11-27T17:21:36",
+        "seal": "874b037e8f3aa35d6ab59f78c9bacb72f12e1dc2acd5642e6c9a788f1ea96362"
+      }
+    }
+  ]
+}

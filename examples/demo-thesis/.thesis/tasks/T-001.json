@@ -1,0 +1,57 @@
+{
+  "id": "T-001",
+  "created": "2026-11-27T17:21:37",
+  "created_by": "Jane",
+  "status": "done",
+  "chapter": 1,
+  "files": [
+    "chapters/01_Introduction.md"
+  ],
+  "note": "",
+  "inputs": {
+    "style_guide": ".thesis/style/guide.json",
+    "ledger": ".thesis/citations/ledger.json",
+    "dialogue_dir": ".thesis/dialogue",
+    "thesis_toml": "thesis.toml",
+    "plan": ".thesis/plan.toml"
+  },
+  "chapter_plan": {
+    "title": "Introduction",
+    "pages": [
+      2,
+      4
+    ],
+    "words": [
+      500,
+      1000
+    ],
+    "narrative": "Context, problem, research question and objectives. Promises nothing that Chapters 3–4 do not deliver. Written last."
+  },
+  "output": ".thesis/reviews/T-001.json",
+  "role": "proposal-drafter",
+  "role_file": "/Users/pauloribeiro/Desktop/PhD/agentic-thesis-workbench/atw/roles/proposal-drafter/ROLE.md",
+  "writes": "proposals",
+  "independent": false,
+  "fills_check": "",
+  "parent": null,
+  "comments": [
+    {
+      "id": "C-3c97d1fe",
+      "file": "chapters/01_Introduction.md",
+      "quote": "We believe this work makes a really significant contribution to the field.",
+      "kind": "style",
+      "text": "Empty claim, first person and emphasis. Say what the contribution is, or drop the sentence.",
+      "replies": []
+    },
+    {
+      "id": "C-dd893945",
+      "file": "chapters/01_Introduction.md",
+      "quote": "The gap this thesis addresses is therefore not the lack of sensors or the lack of models",
+      "kind": "question",
+      "text": "Is this the same gap as the two open challenges at the end of Chapter 2? Make them match.",
+      "replies": []
+    }
+  ],
+  "validated": "2026-11-27T17:21:37",
+  "errors": []
+}

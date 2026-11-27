@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "entries": [
+    {"thread": "STYLE_PLAN.md", "q": "Q1", "kind": "Term", "title": "Drainage curve",
+     "options": {"Option A": {"preferred": "drainage curve", "variants": ["drainage function", "drainage-curve"]},
+                 "Option B": {"preferred": "drainage function", "variants": ["drainage curve"]}}},
+    {"thread": "STYLE_PLAN.md", "q": "Q2", "kind": "Term", "title": "Soil-moisture sensor",
+     "options": {"Option A": {"preferred": "soil-moisture sensor", "variants": ["soil moisture sensor"]}}}
+  ]
+}

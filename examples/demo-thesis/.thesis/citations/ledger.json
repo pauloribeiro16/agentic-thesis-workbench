@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "key": "Almeida2021",
+      "file": "chapters/03_Method.md",
+      "claim": "The fitted rate is blended with the previous estimate, so that a single noisy event cannot move the curve far",
+      "source": "lit:Almeida2021/full_text.md",
+      "start": 438,
+      "end": 541,
+      "sha256": "38b0b4a84648ccf5351369ec901773fad294db03c9ded00a7b8a88ee07edbcd8",
+      "verdict": "supports"
+    },
+    {
+      "key": "Okafor2022",
+      "file": "chapters/01_Introduction.md",
+      "claim": "A sensor node that reports volumetric water content every fifteen minutes now costs less than a day of hired labour",
+      "source": "lit:Okafor2022/full_text.md",
+      "start": 376,
+      "end": 472,
+      "sha256": "2432f9706dff1ca6246ba4cd42329358377793564db0e78ff510c58a463110bd",
+      "verdict": "partial"
+    },
+    {
+      "key": "Tanaka2023",
+      "file": "chapters/02_Background.md",
+      "claim": "Field studies report three recurring failure modes: slow drift over a season, sudden offsets after the soil cracks around the probe, and gaps when the radio link fails",
+      "source": "lit:Tanaka2023/full_text.md",
+      "start": 202,
+      "end": 341,
+      "sha256": "db5a249399b6ac69c4501c368fcd045cc5969ba3659a3f430bd5f23a094df9b5",
+      "verdict": "supports"
+    },
+    {
+      "key": "Almeida2021",
+      "file": "chapters/01_Introduction.md",
+      "claim": "most of them still schedule irrigation by habit rather than by measurement",
+      "source": "lit:Almeida2021/full_text.md",
+      "start": 563,
+      "end": 642,
+      "sha256": "dd7585ab50ee77b60d891e33675dd094fc0f08cf586a678194ac354b5721baa9",
+      "verdict": "does_not_support"
+    }
+  ]
+}

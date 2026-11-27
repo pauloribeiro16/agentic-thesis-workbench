@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "chapter": 2,
+  "comments": [
+    {
+      "id": "C-f1a9705d",
+      "file": "chapters/02_Background.md",
+      "quote": "(Hartmann, 2018)",
+      "prefix": "threshold with it: a sensor that reads too wet delays irrigation until the crop is already stressed ",
+      "suffix": ".\n\n## 2.4 Learning the soil's response\n\nA small body of work estimates the drainage curve of a plot ",
+      "pos": 1834,
+      "author": "Jane",
+      "date": "2026-11-27T17:21:36",
+      "kind": "cite",
+      "text": "Hartmann 2018 is not in references.bib. Add the entry or cite another source for the drift claim.",
+      "status": "open",
+      "replies": [],
+      "history": [
+        {
+          "date": "2026-11-27T17:21:36",
+          "by": "Jane",
+          "status": "open"
+        }
+      ]
+    }
+  ]
+}

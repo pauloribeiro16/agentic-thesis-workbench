@@ -1,0 +1,29 @@
+{
+  "task": "T-002",
+  "kind": "review",
+  "role": "tone-reviewer",
+  "agent": {
+    "name": "Gemini CLI",
+    "model": "Gemini 3 Pro"
+  },
+  "independent": true,
+  "summary": "Measured and descriptive overall; two sentences take sides in a chapter that should only report.",
+  "findings": [
+    {
+      "file": "chapters/02_Background.md",
+      "quote": "Their weakness is that a drifting sensor moves the threshold with it",
+      "severity": "warn",
+      "category": "evaluative",
+      "problem": "Judges threshold methods in the state of the art.",
+      "suggestion": "Report the limitation as the cited source states it."
+    },
+    {
+      "file": "chapters/02_Background.md",
+      "quote": "They work well with clean data",
+      "severity": "info",
+      "category": "hedging",
+      "problem": "'work well' is vague.",
+      "suggestion": "Give the convergence result the source reports (five irrigation events)."
+    }
+  ]
+}

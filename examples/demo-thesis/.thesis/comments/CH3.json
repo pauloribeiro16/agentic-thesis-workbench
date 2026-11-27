@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "chapter": 3,
+  "comments": [
+    {
+      "id": "C-edca888d",
+      "file": "chapters/03_Method.md",
+      "quote": "the decision stage widens its safety margin",
+      "prefix": "r (Almeida & Costa, 2021). When fewer than two nodes are trusted, the previous estimate is kept and ",
+      "suffix": ".\n\n## 3.4 Irrigation decision\n\nThe decision stage forecasts the root-zone water content for the next",
+      "pos": 1356,
+      "author": "Jane",
+      "date": "2026-11-27T17:21:36",
+      "kind": "fix",
+      "text": "By how much? See CH3_PLAN Q2 — this is the deadlock I need to decide.",
+      "status": "open",
+      "replies": [],
+      "history": [
+        {
+          "date": "2026-11-27T17:21:36",
+          "by": "Jane",
+          "status": "open"
+        }
+      ]
+    }
+  ]
+}

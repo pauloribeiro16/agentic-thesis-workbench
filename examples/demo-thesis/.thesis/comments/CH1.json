@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "chapter": 1,
+  "comments": [
+    {
+      "id": "C-3c97d1fe",
+      "file": "chapters/01_Introduction.md",
+      "quote": "We believe this work makes a really significant contribution to the field.",
+      "prefix": "fixed-calendar irrigation on three pilot farms over two seasons (Chapter 4).\n\n## 1.4 Contributions\n\n",
+      "suffix": " The thesis contributes a sensor-quality model that flags drifting and disconnected nodes, an adapti",
+      "pos": 2326,
+      "author": "Jane",
+      "date": "2026-11-27T17:21:36",
+      "kind": "style",
+      "text": "Empty claim, first person and emphasis. Say what the contribution is, or drop the sentence.",
+      "status": "addressed",
+      "replies": [],
+      "history": [
+        {
+          "date": "2026-11-27T17:21:36",
+          "by": "Jane",
+          "status": "open"
+        },
+        {
+          "date": "2026-11-27T17:21:37",
+          "by": "Claude Code",
+          "status": "addressed",
+          "task": "T-001"
+        }
+      ],
+      "proposal": {
+        "quote": "We believe this work makes a really significant contribution to the field. ",
+        "replacement": "",
+        "rationale": "The next sentence already states the three contributions; this one adds only emphasis.",
+        "by": "Claude Code",
+        "task": "T-001"
+      }
+    },
+    {
+      "id": "C-dd893945",
+      "file": "chapters/01_Introduction.md",
+      "quote": "The gap this thesis addresses is therefore not the lack of sensors or the lack of models",
+      "prefix": "nectivity for days at a time. Agronomic models need parameters that nobody on the farm can supply.\n\n",
+      "suffix": ", but the lack of a scheduling method that stays useful when the data are incomplete and the paramet",
+      "pos": 1456,
+      "author": "Jane",
+      "date": "2026-11-27T17:21:36",
+      "kind": "question",
+      "text": "Is this the same gap as the two open challenges at the end of Chapter 2? Make them match.",
+      "status": "approved",
+      "replies": [],
+      "history": [
+        {
+          "date": "2026-11-27T17:21:36",
+          "by": "Jane",
+          "status": "open"
+        },
+        {
+          "date": "2026-11-27T17:21:37",
+          "by": "Claude Code",
+          "status": "addressed",
+          "task": "T-001"
+        },
+        {
+          "date": "2026-11-27T17:21:37",
+          "by": "Jane",
+          "status": "approved"
+        }
+      ],
+      "proposal": {
+        "quote": "The gap this thesis addresses is therefore not the lack of sensors or the lack of models, but the lack of a scheduling method that stays useful when the data are incomplete and the parameters are unknown.",
+        "replacement": "The gap this thesis addresses is therefore not the lack of sensors or the lack of models, but the lack of a scheduling method that treats sensor quality as an input and learns the soil's response from incomplete data — the two open challenges of §2.5.",
+        "rationale": "Ties the problem statement to the two challenges that close Chapter 2.",
+        "by": "Claude Code",
+        "task": "T-001",
+        "approved_by": "Jane",
+        "approved_at": "2026-11-27T17:21:37",
+        "seal": "74d4df40b2a517c6dcbf74f016537b3f3bfad475d57f7755b54993d290c446d2"
+      }
+    }
+  ]
+}

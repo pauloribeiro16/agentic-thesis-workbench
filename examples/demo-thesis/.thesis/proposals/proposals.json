@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "topics": [
+    {
+      "id": "t1",
+      "thread": "CH3_PLAN.md",
+      "q": "Q1",
+      "title": "Running example through the method",
+      "why": "Agents agreed (Q1) that one plot should be followed through the three stages."
+    },
+    {
+      "id": "t2",
+      "thread": "CH3_PLAN.md",
+      "q": "Q4",
+      "title": "Limits vs threats to validity",
+      "why": "§5.2 repeats §4.5; keep threats in Chapter 4."
+    }
+  ],
+  "items": [
+    {
+      "id": "P-a1b2c3",
+      "topic": "t1",
+      "file": "chapters/03_Method.md",
+      "old": "The method has three stages that run every morning on each plot.",
+      "new": "The method has three stages that run every morning on each plot. Throughout the chapter, the tomato plot of Farm B — the farm with the only failed plot-season (§4.3) — is followed through all three.",
+      "desc": "Introduce the running example once, in the overview.",
+      "status": "approved",
+      "by": "Claude Code (Opus 5.5)",
+      "decided_by": "Jane",
+      "decided_at": "2026-11-27",
+      "seal": "e1393b197fdddcc0a16e2bfe00e3d2e8fe13e51a7f9a71ab673a2263f7e20985"
+    },
+    {
+      "id": "P-d4e5f6",
+      "topic": "t2",
+      "file": "chapters/05_Conclusion.md",
+      "old": "The evaluation covers one crop, three farms and two seasons.",
+      "new": "The answer holds for one crop under the conditions of three farms; it says nothing yet about crops with deeper roots.",
+      "desc": "Speak about the limits of the answer, not of the design (threats stay in §4.5).",
+      "status": "pending",
+      "by": "Gemini CLI (Gemini 3 Pro)"
+    },
+    {
+      "id": "P-0789ab",
+      "topic": "t2",
+      "file": "chapters/04_Evaluation.md",
+      "old": "Three pilot farms are a small sample, and the plots were chosen by the farmers.",
+      "new": "Three pilot farms are a small sample. The plots were chosen by the farmers, which may favour well-kept plots.",
+      "desc": "Name the direction of the selection bias.",
+      "status": "rejected",
+      "by": "Claude Code (Opus 5.5)",
+      "decided_by": "Jane",
+      "decided_at": "2026-11-27"
+    }
+  ]
+}

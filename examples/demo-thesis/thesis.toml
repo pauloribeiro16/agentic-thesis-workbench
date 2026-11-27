@@ -1,0 +1,37 @@
+# DEMO THESIS — fictional data that shows what the workbench does. See README.md in this folder.
+
+[project]
+title = "Adaptive Irrigation Scheduling from Low-Cost Soil Sensors"
+author = "Jane Researcher"
+language = "en-GB"
+plan = ".thesis/plan.toml"           # the author's targets, chapters and writing rules
+
+[ui]
+locale = "en"                        # en | pt  (interface only)
+
+[format]
+adapter = "markdown"
+chapters_glob = "chapters/*.md"
+
+[citations]
+provider = "bibtex"
+bib_file = "references.bib"
+library_dir = "sources"              # one folder per work, named by its key, with full_text.md
+syntax = "author-year"
+ledger_file = ".thesis/citations/ledger.json"
+
+[agents]
+dialogue_dir = ".thesis/dialogue"
+dialogue_profile = "en"
+comments_dir = ".thesis/comments"
+proposals_file = ".thesis/proposals/proposals.json"
+tasks_dir = ".thesis/tasks"
+reviews_dir = ".thesis/reviews"
+style_guide_file = ".thesis/style/guide.json"
+moderator_name = "Jane"
+sign_decisions = true
+# The demo's signing key is passed with ATW_SIGNING_KEY (see README.md). A real thesis keeps its key outside the repository.
+
+[quality]
+packs = ["core", "citations", "style", "governance", "agent-review"]
+spelling_variant = "en-GB"

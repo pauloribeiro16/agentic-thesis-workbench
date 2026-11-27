@@ -1,0 +1,31 @@
+{
+  "id": "T-002",
+  "created": "2026-11-27T17:21:37",
+  "created_by": "Jane",
+  "status": "done",
+  "chapter": 2,
+  "files": [
+    "chapters/02_Background.md"
+  ],
+  "note": "",
+  "inputs": {
+    "style_guide": ".thesis/style/guide.json",
+    "ledger": ".thesis/citations/ledger.json",
+    "dialogue_dir": ".thesis/dialogue",
+    "thesis_toml": "thesis.toml",
+    "plan": ".thesis/plan.toml"
+  },
+  "chapter_plan": {
+    "title": "Background",
+    "narrative": "Soil-water balance, low-cost sensing and existing schedulers. State of the art only; ends on the two open challenges that Chapter 3 addresses."
+  },
+  "output": ".thesis/reviews/T-002.json",
+  "role": "tone-reviewer",
+  "role_file": "/Users/pauloribeiro/Desktop/PhD/agentic-thesis-workbench/atw/roles/tone-reviewer/ROLE.md",
+  "writes": "reviews",
+  "independent": true,
+  "fills_check": "tone",
+  "parent": null,
+  "validated": "2026-11-27T17:21:37",
+  "errors": []
+}

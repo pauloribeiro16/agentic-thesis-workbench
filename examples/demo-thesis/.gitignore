@@ -1,0 +1,4 @@
+# Agentic Thesis Workbench: local builds and measurements
+.thesis/build/
+.thesis/pages.json
+__pycache__/
