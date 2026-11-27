@@ -272,3 +272,13 @@ details.narrative p { margin: 6px 0 4px; font: 14px/1.55 var(--serif); }
 .passage blockquote { margin: 4px 0; padding: 6px 10px; border-left: 3px solid var(--st-fechado); background: var(--surface-2); font: 13.5px/1.5 var(--serif); color: var(--muted); }
 .fulltext { max-height: 75vh; overflow: auto; border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; }
 .use-text p { margin: 0; }
+/* Decisions: clicking a question narrows the right panel to that question */
+.dec-q { cursor: pointer; } .dec-q:hover td { background: var(--surface-2); }
+.dec-q.sel td { background: var(--accent-soft); } .dec-q.sel td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+.dec-side { align-self: start; position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow: auto; }
+.dec-qhead { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; }
+.dec-qhead h2 { margin: 0; }
+.dec-qstate { margin: 8px 0; }
+.dec-k { margin: 14px 0 6px; }
+.dec-hint { margin-bottom: 10px; }
+.dec-hist { margin: 0 0 4px; padding-left: 18px; font-size: 13px; }

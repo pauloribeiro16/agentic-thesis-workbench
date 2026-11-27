@@ -952,6 +952,46 @@
   }
 
   // ---------- Decisions ----------
+  function decTurn(x, md, open) {
+    return `<details class="turn" ${open ? "open" : ""}>
+      <summary class="turn-head">${who(x.agent || x.heading, x.slot)} <span>${esc(x.date)}</span>
+        ${x.kind === "moderator" ? (x.sealed ? pill("fechado", t("dec.sealed")) : pill("bloqueado", t("dec.unsealed"))) : ""}</summary>
+      <div class="turn-body prose small">${renderMd(md.slice(0, 6000))}</div></details>`;
+  }
+
+  // The part of one turn that is about question `qid`: its "**Qn — …**" block (up to the next question
+  // block or heading), plus any other line that names it (table rows, decisions). "" when the turn never names it.
+  function qExcerpt(md, qid) {
+    const id = qid.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const names = new RegExp(`(^|[^\\w-])${id}(?![\\w-])`);
+    const opens = new RegExp(`^\\s*(?:#{2,4}\\s*)?\\*\\*\\s*${id}\\s*[—–-]`);
+    const anyQ = /^\s*(?:#{2,4}\s*)?\*\*\s*Q[\w-]*\d\w*\s*[—–-]/;
+    const out = [];
+    let inBlock = false;
+    for (const line of md.split("\n")) {
+      if (opens.test(line)) { inBlock = true; if (out.length) out.push(""); out.push(line); continue; }
+      if (inBlock && (anyQ.test(line) || /^#{1,4}\s/.test(line))) { inBlock = false; out.push(""); }
+      if (inBlock) { out.push(line); continue; }
+      if (!names.test(line)) continue;
+      const s = line.trim();
+      if (s.startsWith("|")) out.push("- " + s.replace(/^\||\|$/g, "").split("|").map((c) => c.trim()).filter(Boolean).join(" · "));
+      else out.push(line);
+    }
+    return out.join("\n").trim();
+  }
+
+  function decQuestionPanel(th, q) {
+    const rel = th.turns.map((x) => ({ x, md: qExcerpt(x.md, q.id) })).filter((r) => r.md).reverse();
+    return `<div class="dec-qhead"><h2>${esc(q.id)} — ${esc(q.title)}</h2>
+        <button class="btn sm" id="dec-all">${t("dec.all_turns")}</button></div>
+      <div class="dec-qstate">${qPill(q.state)}${q.state === "APPROVED" ? ` <span class="sub">${q.authenticated ? t("dec.sealed") : t("dec.unsealed")}</span>` : ""}</div>
+      ${q.summary ? `<div class="sub">${esc(q.summary)}</div>` : ""}
+      ${q.history.length ? `<div class="k dec-k">${t("dec.history")}</div><ol class="dec-hist">${q.history.map((h) =>
+        `<li><span class="muted">${esc(h.date)}</span> ${esc(h.agent || "—")} → ${esc(t(`dec.state.${h.state}`))}</li>`).join("")}</ol>` : ""}
+      <div class="k dec-k">${t("dec.turns_about", { q: q.id, n: rel.length, total: th.turns.length })}</div>
+      ${rel.length ? rel.map((r, i) => decTurn(r.x, r.md, i < 3)).join("") : `<div class="empty">${t("dec.no_turns")}</div>`}`;
+  }
+
   function renderDecisions(_, params) {
     const el = $("#view-decisions");
     const threads = S.state.threads;
@@ -959,6 +999,9 @@
     if (params?.get("thread")) S.activeThread = params.get("thread");
     const th = threads.find((x) => x.file === S.activeThread) || threads.find((x) => x.questions.some((q) => q.needs_author)) || threads[0];
     S.activeThread = th.file;
+    S.activeQ = S.activeQ || {};
+    if (params?.get("q")) S.activeQ[th.file] = params.get("q");
+    const selQ = th.questions.find((q) => q.id === S.activeQ[th.file]) || null;
     el.innerHTML = `
       <div class="page-head"><div><h1>${t("dec.title")}</h1><div class="sub">${t("dec.sub")}</div></div>
         <div class="toolbar"><select id="th-sel">${threads.map((x) => {
@@ -967,21 +1010,26 @@
         }).join("")}</select></div></div>
       <div class="grid-2">
         <div class="card"><h2>${t("dec.questions")} (${th.questions.length})</h2>
-          <table class="table"><tbody>${th.questions.map((q) => `<tr>
-            <td class="mono">${esc(q.id)}</td>
+          <table class="table"><tbody>${th.questions.map((q) => `<tr class="dec-q${q.id === selQ?.id ? " sel" : ""}" data-qrow="${esc(q.id)}">
+            <td class="mono nowrap">${esc(q.id)}</td>
             <td>${esc(q.title)}${q.summary ? `<div class="sub">${esc(q.summary)}</div>` : ""}
               ${q.verdicts.length ? `<div class="sub">${q.verdicts.map((v) => `${esc(v.agent)}: ${esc(v.verdict)}`).join(" · ")}</div>` : ""}
               ${q.unauthorized_claims.length ? `<div class="tag bad">${t("dec.claims", { n: q.unauthorized_claims.length })}</div>` : ""}</td>
             <td>${qPill(q.state)}${q.state === "APPROVED" ? `<div class="sub">${q.authenticated ? t("dec.sealed") : t("dec.unsealed")}</div>` : ""}</td>
             <td class="nowrap">${q.state !== "APPROVED" ? `<button class="btn sm primary" data-dec="APPROVED" data-q="${esc(q.id)}">${t("dec.approve")}</button>
               <button class="btn sm" data-dec="REJECTED" data-q="${esc(q.id)}">${t("dec.reject")}</button>` : ""}</td></tr>`).join("")}</tbody></table></div>
-        <div class="card"><h2>${t("dec.turns")} (${th.turns.length})</h2>
-          ${th.turns.slice().reverse().map((x) => `<details class="turn" ${x.idx === th.turns.length - 1 ? "open" : ""}>
-            <summary class="turn-head">${who(x.agent || x.heading, x.slot)} <span>${esc(x.date)}</span>
-              ${x.kind === "moderator" ? (x.sealed ? pill("fechado", t("dec.sealed")) : pill("bloqueado", t("dec.unsealed"))) : ""}</summary>
-            <div class="turn-body prose small">${renderMd(x.md.slice(0, 6000))}</div></details>`).join("")}</div>
+        <div class="card dec-side">${selQ ? decQuestionPanel(th, selQ) : `
+          <h2>${t("dec.turns")} (${th.turns.length})</h2><div class="sub dec-hint">${t("dec.pick")}</div>
+          ${th.turns.slice().reverse().map((x) => decTurn(x, x.md, x.idx === th.turns.length - 1)).join("")}`}</div>
       </div>`;
     $("#th-sel").onchange = (e) => { S.activeThread = e.target.value; renderDecisions(); };
+    $$("[data-qrow]", el).forEach((r) => (r.onclick = (e) => {
+      if (e.target.closest("button, a")) return;
+      S.activeQ[th.file] = selQ?.id === r.dataset.qrow ? "" : r.dataset.qrow;
+      renderDecisions();
+    }));
+    const back = $("#dec-all", el);
+    if (back) back.onclick = () => { S.activeQ[th.file] = ""; renderDecisions(); };
     $$("[data-dec]", el).forEach((b) => (b.onclick = async () => {
       try {
         await api("api/decide", { file: th.file, sha: th.sha, decisions: [{ id: b.dataset.q, state: b.dataset.dec }] });
