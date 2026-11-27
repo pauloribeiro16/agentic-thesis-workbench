@@ -79,6 +79,7 @@ end up with two keys and two versions of what was approved. Set `require_key_pat
 - [docs/AGENT_MANUAL.md](docs/AGENT_MANUAL.md) — how agents do tasks, run roles and customise the workbench
 - [docs/SCHEMAS.md](docs/SCHEMAS.md) — task, review, comment, ledger and style-guide formats
 - [docs/PLUGINS.md](docs/PLUGINS.md) — writing checks, formats, citation providers and roles
+- [docs/RECIPES.md](docs/RECIPES.md) — carry the workbench inside the thesis, compile chapters from the manuscript, keep generated LaTeX in sync
 - [thesis.example.toml](thesis.example.toml) — annotated configuration
 
 ## License

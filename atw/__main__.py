@@ -42,6 +42,16 @@ forbid_first_person = false
 spelling_variant = "en-GB"           # none | en-GB | en-US
 """
 
+SERVE_SH = """#!/bin/sh
+# Open the workbench for this thesis. Uses a vendored copy in agentic-thesis-workbench/ when present
+# (python3 -m atw vendor --workspace .), otherwise the installed one.
+cd "$(dirname "$0")/.."
+[ -d agentic-thesis-workbench/atw ] && export PYTHONPATH=agentic-thesis-workbench
+exec python3 -m atw serve --workspace . --port "${1:-8765}"
+"""
+
+GITIGNORE = [".thesis/build/", ".thesis/pages.json", "__pycache__/"]
+
 PLAN_TOML = """# Your plan for this thesis — these are your choices, not engine defaults.
 # Delete or change anything. A check whose rule is not set here reports "not configured".
 
@@ -97,6 +107,17 @@ def cmd_init(workspace: Path) -> int:
     if not guide.exists():
         guide.write_text(json.dumps({"version": 1, "entries": []}, indent=2) + "\n", encoding="utf-8")
         print(f"Created {guide}")
+    serve = workspace / ".thesis" / "serve.sh"
+    if not serve.exists():
+        serve.write_text(SERVE_SH, encoding="utf-8")
+        print(f"Created {serve}")
+    gi = workspace / ".gitignore"
+    lines = gi.read_text(encoding="utf-8").splitlines() if gi.exists() else []
+    missing = [l for l in GITIGNORE if l not in lines]
+    if missing:
+        with gi.open("a", encoding="utf-8") as fh:
+            fh.write(("\n" if lines else "") + "# Agentic Thesis Workbench: local builds and measurements\n" + "\n".join(missing) + "\n")
+        print(f"Updated {gi}")
     agents_md = workspace / "AGENTS.md"
     if not agents_md.exists():
         agents_md.write_text(AGENTS_MD.format(tasks_dir=cfg.tasks_dir, dialogue_dir=cfg.dialogue_dir,
@@ -168,6 +189,8 @@ def main(argv: list[str] | None = None) -> int:
     re_.add_argument("--dest", help="destination folder relative to the workspace")
 
     ws(sub.add_parser("plugins", help="list loaded plugins and checks"))
+    v = ws(sub.add_parser("vendor", help="copy this workbench into a thesis repository (exact version, no examples/tests)"))
+    v.add_argument("--into", default="agentic-thesis-workbench", help="folder inside the thesis")
     k = sub.add_parser("key", help="signing key for the author's approvals").add_subparsers(dest="sub", required=True)
     ws(k.add_parser("status"))
     ws(k.add_parser("init"))
@@ -224,6 +247,16 @@ def main(argv: list[str] | None = None) -> int:
         else:
             for path in export_roles(cfg, a.to, a.dest):
                 print(f"wrote {path}")
+        return 0
+    if a.cmd == "vendor":
+        from .vendor import vendor
+        try:
+            target, commit = vendor(w, a.into)
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        print(f"{target} = {commit or 'unknown commit'}")
+        print(f"Run it with: PYTHONPATH={a.into} python3 -m atw serve --workspace .")
         return 0
     if a.cmd == "key":
         from .dialogue import ModeratorSeal

@@ -35,6 +35,7 @@ BUILTIN_MODULES = (
     "atw.builtin.checks_governance",
     "atw.builtin.checks_agent_review",
     "atw.builtin.checks_macro",
+    "atw.builtin.checks_sync",
 )
 
 

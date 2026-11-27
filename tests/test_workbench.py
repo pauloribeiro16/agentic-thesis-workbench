@@ -445,6 +445,44 @@ class TestCache(Base):
         self.assertGreater(second["stats"]["total_words"], first["stats"]["total_words"])
 
 
+class TestGenericTools(Base):
+    def test_vendor_copies_runtime_only_and_records_commit(self):
+        from atw.vendor import vendor
+        target, _ = vendor(self.ws)
+        for part in ("atw/server.py", "web/app.js", "docs/AGENT_MANUAL.md", "LICENSE", ".source-commit"):
+            self.assertTrue((target / part).exists(), part)
+        self.assertFalse((target / "examples").exists())
+        self.assertFalse((target / "tests").exists())
+        (target / "stale.txt").write_text("x")
+        vendor(self.ws)
+        self.assertFalse((target / "stale.txt").exists())        # replaced as a whole
+        (self.ws / "mine").mkdir()
+        (self.ws / "mine" / "notes.md").write_text("keep")
+        with self.assertRaises(ValueError):
+            vendor(self.ws, "mine")                                # never wipes a folder that is not a vendored copy
+        self.assertTrue((self.ws / "mine" / "notes.md").exists())
+
+    def test_init_writes_serve_script_and_gitignore(self):
+        ws = self.tmp / "fresh2"
+        cmd_init(ws)
+        self.assertTrue((ws / ".thesis/serve.sh").is_file())
+        gi = (ws / ".gitignore").read_text()
+        self.assertIn(".thesis/build/", gi)
+        cmd_init(ws)
+        self.assertEqual((ws / ".gitignore").read_text().count(".thesis/build/"), 1)
+
+    def test_generated_sync_check(self):
+        gen = self.ws / "gen.py"
+        gen.write_text("import sys\nprint('GENERATED ' + sys.argv[1])\n")
+        self.write("latex/ch1.tex", "GENERATED 1\n")
+        toml = (self.ws / "thesis.toml").read_text().replace("[citations]", '[format.sync]\ncommand = ["python3", "gen.py", "{chapter}"]\ntarget = "latex/ch{chapter}.tex"\n\n[citations]', 1)
+        self.write("thesis.toml", toml)
+        check = lambda: next(c for c in run_quality_checks(self.cfg())["chapters"][0]["checks"] if c["id"] == "generated_sync")
+        self.assertEqual(check()["state"], "ok")
+        self.write("latex/ch1.tex", "OLD TEXT\n")
+        self.assertEqual(check()["state"], "bad")
+
+
 class TestPlanSeparation(Base):
     def test_engine_has_no_limits_of_its_own(self):
         ws = self.tmp / "bare"
