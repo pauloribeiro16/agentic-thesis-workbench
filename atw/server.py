@@ -493,6 +493,11 @@ def make_handler(app: WorkbenchApp):
                     if not pdf:
                         return self._json({"error": "no PDF yet — compile the chapter"}, HTTPStatus.NOT_FOUND)
                     return self._send(pdf.read_bytes(), "application/pdf")
+                if path == "/api/output":
+                    from . import library, output
+                    c = app.cfg()
+                    return self._json({"output": output.status(c), "library": {**library.settings(c),
+                                       "last": library.last_sync(c)}})
                 if path == "/api/agents":
                     return self._json(app.agents())
                 if path == "/api/work":
@@ -565,6 +570,17 @@ def make_handler(app: WorkbenchApp):
                     return self._json({"ok": ok, "errors": errors})
                 if path == "/api/compile":
                     return self._json(app.compile(int(body.get("chapter") or 0)))
+                if path == "/api/library":
+                    from . import library
+                    try:
+                        return self._json({"ok": True, **library.sync(cfg)})
+                    except library.LibraryError as exc:
+                        return self._json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+                if path == "/api/template":
+                    from . import output
+                    ok, msg = output.apply(cfg, body.get("template"), body.get("base"))
+                    return self._json({"ok": True, "message": msg} if ok else {"error": msg},
+                                      HTTPStatus.OK if ok else HTTPStatus.BAD_REQUEST)
             except ValueError as exc:
                 return self._json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
             return self._json({"error": "unknown endpoint"}, HTTPStatus.NOT_FOUND)

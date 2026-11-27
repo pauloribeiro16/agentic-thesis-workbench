@@ -194,6 +194,16 @@ def main(argv: list[str] | None = None) -> int:
     k = sub.add_parser("key", help="signing key for the author's approvals").add_subparsers(dest="sub", required=True)
     ws(k.add_parser("status"))
     ws(k.add_parser("init"))
+    tp = sub.add_parser("template", help="thesis templates and the output base (latex | word)").add_subparsers(dest="sub", required=True)
+    ws(tp.add_parser("list"))
+    ws(tp.add_parser("status"))
+    ta = ws(tp.add_parser("apply", help="copy the template into [output] dir, or refresh its generated parts"))
+    ta.add_argument("--template", help="template id (default: [output] template)")
+    ta.add_argument("--base", choices=("latex", "word"), help="default: [output] base")
+    ta.add_argument("--into", help="folder inside the thesis (default: [output] dir)")
+    lb = sub.add_parser("library", help="reference managers: Zotero and Mendeley").add_subparsers(dest="sub", required=True)
+    ws(lb.add_parser("sync", help="fetch the library and write csl_file (and bib_export)"))
+    ws(lb.add_parser("status"))
 
     a = p.parse_args(argv)
     w = Path(a.workspace).expanduser().resolve()
@@ -270,6 +280,36 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         print(f"signing {'on' if st['enabled'] else 'off'} · key {st['key_path']} · {'exists' if st['key_exists'] else 'MISSING'}")
         return 0 if st["key_exists"] or not st["enabled"] else 1
+    if a.cmd == "template":
+        from . import output
+        if a.sub == "list":
+            for tid, t in sorted(output.list_templates(cfg).items()):
+                ready = ", ".join(f"{b} {'ready' if ok else 'missing'}" for b, ok in t["ready"].items())
+                print(f"{tid:<16} {t.get('name', tid)}  [{ready}]")
+            return 0
+        if a.sub == "status":
+            st = output.status(cfg)
+            print(f"base {st['base']} · template {st['template'] or '(none)'} · dir {st['dir']} · "
+                  f"{'applied: ' + st['main'] if st['applied'] else 'not applied yet'}")
+            return 0
+        ok, msg = output.apply(cfg, a.template, a.base, a.into)
+        print(msg if ok else f"error: {msg}", file=sys.stdout if ok else sys.stderr)
+        return 0 if ok else 2
+    if a.cmd == "library":
+        from . import library
+        if a.sub == "status":
+            st, last = library.settings(cfg), library.last_sync(cfg)
+            print(f"source {st['source'] or '(none)'} · csl_file {st['csl_file']}"
+                  + (f" · bib_export {st['bib_export']}" if st["bib_export"] else ""))
+            print(f"last sync: {last['synced_at']} · {last['count']} items" if last else "never synced")
+            return 0
+        try:
+            meta = library.sync(cfg)
+        except library.LibraryError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        print(f"{meta['count']} items from {meta['source']} ({meta['mode']}) → {', '.join(meta['files'])}")
+        return 0
     if a.cmd == "plugins":
         from .plugins import load_registry
         reg = load_registry(cfg)

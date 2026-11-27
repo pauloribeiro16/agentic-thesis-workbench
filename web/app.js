@@ -1138,6 +1138,7 @@
         <div class="stat"><div class="k">${t("lit.match")}</div><div class="v">${fmt(sm.match?.confirmed)} / ${fmt(d.total)}</div><div class="h">${t("lit.match_h", { d: sm.match?.doubtful || 0, m: sm.match?.mismatch || 0, x: sm.match?.no_text || 0, s: sm.match?.no_source || 0 })}</div></div>
         <div class="stat"><div class="k">${t("lit.passages")}</div><div class="v">${fmt(sm.passages)} / ${fmt(d.total)}</div><div class="h">${t("lit.passages_h")}</div></div>
       </div>
+      <div id="lit-sync"></div>
       <div class="toolbar"><input class="input" id="lit-q" placeholder="${esc(t("lit.filter"))}" value="${esc(S.litFilter.q)}" style="min-width:280px">
         <select id="lit-st">${opts.map(([k, l]) => `<option value="${k}"${stf === k ? " selected" : ""}>${l}</option>`).join("")}</select></div>
       <div class="card">${rows.length ? `<table class="table"><thead><tr><th>${t("lit.key")}</th><th>${t("title")}</th><th>${t("lit.seal")}</th><th>${t("lit.match")}</th><th>${t("lit.passages")}</th></tr></thead><tbody>
@@ -1148,6 +1149,7 @@
           <td class="mono">${e.verified_passages || 0}</td></tr>`).join("")}</tbody></table>` : `<div class="empty">—</div>`}</div>`;
     $("#lit-q").oninput = (e) => { S.litFilter.q = e.target.value; renderLiterature().then(() => { const n = $("#lit-q"); n.focus(); n.setSelectionRange(n.value.length, n.value.length); }); };
     $("#lit-st").onchange = (e) => { S.litFilter.status = e.target.value; renderLiterature(); };
+    renderLibrarySync();
   }
 
   async function renderWork(el, key) {
@@ -1266,14 +1268,56 @@
   }
 
   // ---------- Config ----------
+  // Reference manager (Zotero / Mendeley): last sync and a Sync button, shown in Literature
+  async function renderLibrarySync() {
+    const box = $("#lit-sync");
+    if (!box) return;
+    const o = S.output || (S.output = await api("api/output"));
+    const lib = o.library;
+    if (!lib.source) { box.innerHTML = `<div class="sub lib-none">${t("lib.none")}</div>`; return; }
+    const last = lib.last || {};
+    const mode = (lib[lib.source] || {}).mode || (lib.source === "zotero" ? "local" : "file");
+    box.innerHTML = `<div class="card lib-card"><div><b>${t("lib.title", { s: lib.source === "zotero" ? "Zotero" : "Mendeley" })}</b>
+        <span class="tag">${esc(mode)}</span>
+        <div class="sub">${last.synced_at ? t("lib.last", { d: esc(last.synced_at.replace("T", " ")), n: last.count }) : t("lib.never")}
+          · <span class="mono">${esc(lib.csl_file)}</span>${lib.bib_export ? ` · <span class="mono">${esc(lib.bib_export)}</span>` : ""}</div></div>
+      <button class="btn primary" id="lib-sync">${t("lib.sync")}</button></div>`;
+    $("#lib-sync").onclick = async (e) => {
+      e.target.disabled = true;
+      try {
+        const r = await api("api/library", {});
+        toast(t("lib.done", { n: r.count }));
+        S.output = null; S.literature = null; renderLiterature();
+      } catch (err) { toast(err.message); e.target.disabled = false; }
+    };
+  }
+
+  // Output base (LaTeX / Word) and thesis template, shown in Config
+  function outputCard(o) {
+    const st = o.output;
+    const label = (b) => (b === "word" ? "Word" : "LaTeX");
+    return `<div class="card"><h2>${t("out.title")}</h2>
+      <div class="sub">${t("out.sub")}</div>
+      <div class="out-now">${t("out.base")}: <b>${label(st.base)}</b> · ${t("out.template")}: <b class="mono">${esc(st.template || "—")}</b>
+        · ${t("out.dir")}: <span class="mono">${esc(st.dir)}</span> · ${st.applied ? `${t("out.applied")} <span class="mono">${esc(st.main)}</span>` : t("out.not_applied")}</div>
+      ${st.templates.length ? `<table class="table"><thead><tr><th>${t("out.template")}</th><th>LaTeX</th><th>Word</th><th></th></tr></thead><tbody>
+        ${st.templates.map((x) => `<tr><td><b class="mono">${esc(x.id)}</b><div class="sub">${esc(x.description)}</div></td>
+          ${["latex", "word"].map((b) => `<td>${x.ready[b] ? pill("fechado", t("out.ready")) : `<span title="${esc(x.notes[b] || "")}">${pill("aberto", t("out.missing"))}</span>`}</td>`).join("")}
+          <td class="nowrap">${["latex", "word"].map((b) => `<button class="btn sm${b === st.base ? " primary" : ""}" data-apply="${esc(x.id)}" data-base="${b}"${x.ready[b] ? "" : " disabled"}>${t("out.apply", { b: label(b) })}</button>`).join(" ")}</td></tr>`).join("")}
+        </tbody></table>` : `<div class="empty">${t("out.none")}</div>`}
+      <div class="sub">${t("out.hint")}</div></div>`;
+  }
+
   async function renderConfig() {
     const el = $("#view-config");
     const a = S.agents || (S.agents = await api("api/agents"));
     const plan = S.state.config.plan || {};
     const chs = Object.entries(plan.chapters || {});
     const pair = (v) => (Array.isArray(v) ? `${v[0]}–${v[1]}` : "—");
+    const o = S.output || (S.output = await api("api/output"));
     el.innerHTML = `
       <div class="page-head"><div><h1>${t("cfg.title")}</h1><div class="sub">${t("cfg.sub")} · ${esc(S.state.host_shell)}</div></div></div>
+      ${outputCard(o)}
       <div class="card"><h2>${t("cfg.plan")}</h2>
         <div class="sub">${plan.file ? t("cfg.plan_h", { f: `<code class="mono">${esc(plan.file)}</code>` }) : t("cfg.no_plan")}</div>
         ${chs.length ? `<table class="table"><thead><tr><th>${t("ch")}</th><th>${t("title")}</th><th>${t("pg.pages")}</th><th>${t("words")}</th><th>${t("cfg.sections")}</th><th>${t("ms.narrative")}</th></tr></thead><tbody>
@@ -1284,6 +1328,12 @@
       <div class="grid-2"><div class="card"><h2>${t("cfg.engine")} — ${t("cfg.resolved")}</h2><pre class="mono pre">${esc(JSON.stringify({ ...S.state.config, plan: undefined }, null, 2))}</pre></div>
       <div class="card"><h2>${t("cfg.plugins")}</h2>${a.plugins.map((p) => `<div class="role"><b class="mono">${esc(p.id)}</b> <span class="tag">${esc(p.version)}</span> <span class="sub">${esc(p.source)}</span><div class="sub">${esc(p.description || "")}</div></div>`).join("")}
         ${a.plugin_errors.map((e) => `<div class="sub bad mono">${esc(e)}</div>`).join("")}</div></div>`;
+    $$("[data-apply]", el).forEach((b) => (b.onclick = async () => {
+      try {
+        const r = await api("api/template", { template: b.dataset.apply, base: b.dataset.base });
+        toast(r.message); S.output = null; renderConfig();
+      } catch (err) { toast(err.message); }
+    }));
   }
 
   // ---------- keyboard & live refresh ----------

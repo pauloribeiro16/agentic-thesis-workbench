@@ -282,3 +282,7 @@ details.narrative p { margin: 6px 0 4px; font: 14px/1.55 var(--serif); }
 .dec-k { margin: 14px 0 6px; }
 .dec-hint { margin-bottom: 10px; }
 .dec-hist { margin: 0 0 4px; padding-left: 18px; font-size: 13px; }
+/* Reference manager and output base */
+.lib-card { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.lib-none { margin: 0 0 12px; }
+.out-now { margin: 10px 0 14px; font-size: 14px; }

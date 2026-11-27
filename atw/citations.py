@@ -137,7 +137,8 @@ class CitationService:
 
         entries: list[dict[str, Any]] = []
         provider = load_registry(self.cfg).citation_providers.get(self.cfg.citation_provider)
-        src = self.cfg.csl_file if self.cfg.citation_provider == "csl-json" else self.cfg.bib_file
+        src = (self.cfg.csl_file or "references.json") if self.cfg.citation_provider in ("csl-json", "zotero", "mendeley") \
+            else self.cfg.bib_file
         if provider and src and (ws / src).is_file():
             entries = provider((ws / src).read_text(encoding="utf-8", errors="ignore"))
             for e in entries:

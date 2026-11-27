@@ -77,3 +77,31 @@ target = "latex/chapters/ch{chapter}.tex"
 
 The `generated_sync` check is `bad` when they differ and `warn` when a chapter has no generator (non-zero exit).
 If your generator cannot print to standard output, write a small plugin with the same logic in `.thesis/plugins/`.
+
+## Start a University of Minho thesis in LaTeX, with Zotero
+
+```toml
+[project]
+title = "Your thesis title"
+author = "Your Name"
+[output]
+base = "latex"
+template = "uminho-phd"
+[template]
+school = "School of Engineering"
+school_logo = "EE"
+programme = "Doctoral Programme in …"
+supervisor = "Professor …"
+[citations]
+provider = "zotero"
+bib_export = "latex/references.bib"
+```
+
+```bash
+python3 -m atw template apply --workspace .     # latex/dissertation.tex, covers, preamble, logos
+python3 -m atw library sync --workspace .       # Zotero → references.json + latex/references.bib
+cd latex && tectonic dissertation.tex           # copy the NewsGotT fonts into latex/fonts/ first
+```
+
+Add chapters as `latex/chapters/*.tex` and run `template apply` again to refresh the chapter list. When the official
+Word model is available, save it as `.thesis/templates/uminho-phd/word/template.docx` and apply with `--base word`.

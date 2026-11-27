@@ -118,7 +118,7 @@ class WorkbenchConfig:
                 "chapters_glob": self.chapters_glob,
                 "compiler": self.compiler,
                 "can_compile": bool(self.compile_command),
-                "default_word_target": list(self.default_word_target),
+                "default_word_target": list(self.default_word_target) if self.default_word_target else None,
                 "expected_sections": self.expected_sections,
                 "page_limit": self.page_limit,
                 "has_pdf": bool(self.pages_pdf),

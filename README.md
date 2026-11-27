@@ -18,6 +18,10 @@ A local, model-agnostic web workbench for writing a thesis with several AI agent
   no global score, every check names its rule. Add your own rules in `.thesis/plugins/`.
 - **Human-in-the-loop by construction:** agents only propose; approvals are HMAC-sealed by the author's key, so an
   agent cannot approve a decision or a text change by editing a file.
+- **LaTeX or Word base, on a thesis template:** pick `[output] base = "latex" | "word"` and a template. Ships the
+  University of Minho doctoral template (Despacho RT-80/2026) for LaTeX, with a slot for the official Word model.
+- **Zotero and Mendeley:** sync your library (Zotero 7 on this computer or the web API; Mendeley API or a BibTeX/RIS
+  export) into the bibliography the workbench checks, and into a `.bib` for LaTeX.
 - **Interface in English or Portuguese** (`[ui] locale`); data, files and code stay in English.
 - **Standalone or embedded** behind a host portal (`--host-shell second-brain`).
 
@@ -88,6 +92,47 @@ output is validated before it can touch comments or proposals.
 
 ![Agents](docs/screenshots/agents.png)
 
+## Thesis templates: LaTeX or Word
+
+```toml
+[output]
+base = "latex"              # latex | word
+template = "uminho-phd"     # python3 -m atw template list
+[template]                  # [project] gives author and title
+school = "School of Engineering"
+school_logo = "EE"
+programme = "Doctoral Programme in …"
+supervisor = "…"
+```
+
+`python3 -m atw template apply` (or *Apply* in Config) copies the template into `[output] dir` once and fills the
+fields; later runs only refresh the generated parts (the chapter list, the Word document properties) and never
+overwrite your files. Templates live in `atw/templates/<id>/` and, per thesis, in `.thesis/templates/<id>/`, which
+can also add a base — for example the official `.docx` as `.thesis/templates/uminho-phd/word/template.docx`.
+
+The **uminho-phd** LaTeX base compiles with XeLaTeX/LuaLaTeX (`tectonic dissertation.tex`). The NewsGotT font files
+are not redistributed: copy them into `fonts/`; without them TeX Gyre Heros is used.
+
+## Zotero and Mendeley
+
+```toml
+[citations]
+provider = "zotero"                    # or "mendeley"
+csl_file = "references.json"           # what the workbench reads
+bib_export = "latex/references.bib"    # optional, for LaTeX
+[citations.zotero]
+mode = "local"                         # Zotero 7 running here, or "web" with library_id and ZOTERO_API_KEY
+[citations.mendeley]
+mode = "file"                          # a BibTeX/RIS export, or "api" with MENDELEY_ACCESS_TOKEN
+file = "mendeley.bib"
+```
+
+`python3 -m atw library sync` (or *Sync now* in Literature) reads the library — nothing is written back. Citation keys
+come from the manager when it has them (Better BibTeX, Mendeley) and are otherwise generated as FamilyYear. Keys and
+tokens are read from the environment or `~/.config/agentic-thesis-workbench/credentials.toml`, never from the thesis.
+For Zotero local mode, enable *Settings → Advanced → Allow other applications on this computer to communicate with
+Zotero*.
+
 ## Quick start
 
 ```bash
@@ -113,6 +158,7 @@ Run the tests: `python3 -m unittest discover -s tests`.
 atw/            engine: config, formats, citations, dialogue (governance), comments, tasks, roles, quality, plugins, server
 atw/builtin/    built-in plugins (formats, checks) — same contract as third-party ones
 atw/roles/      built-in roles (ROLE.md) and workflows.toml
+atw/templates/  built-in thesis templates (uminho-phd: LaTeX base, Word slot)
 web/            single-page app + i18n/{en,pt}.json
 docs/           AGENT_MANUAL.md · SCHEMAS.md · PLUGINS.md
 ```

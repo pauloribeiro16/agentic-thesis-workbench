@@ -1,0 +1,28 @@
+# University of Minho — doctoral thesis (Despacho RT-80/2026)
+id = "uminho-phd"
+name = "University of Minho — Doctoral thesis"
+description = "Covers, preamble and styles for UMinho doctoral theses (RT-80/2026). LaTeX ready; Word slot waits for the official .docx."
+
+[bases.latex]
+dir = "latex"
+main = "dissertation.tex"
+compile = ["tectonic", "dissertation.tex"]
+notes = "Needs XeLaTeX/LuaLaTeX (tectonic works). Put the NewsGotT font files in fonts/; without them TeX Gyre Heros is used."
+
+[bases.word]
+dir = "word"
+main = "template.docx"
+notes = "Place the official UMinho .docx here as word/template.docx (or in <thesis>/.thesis/templates/uminho-phd/word/)."
+
+# Fields read from thesis.toml: [project] author/title and [template] for the rest.
+[fields]
+author = "Author Name"
+title_a = "Thesis title, first line"
+title_b = ""
+title_c = ""
+school = "School of Engineering"
+school_logo = "EE"
+programme = "Doctoral Programme in …"
+area = ""
+supervisor = "Supervisor Name"
+cosupervisor = ""

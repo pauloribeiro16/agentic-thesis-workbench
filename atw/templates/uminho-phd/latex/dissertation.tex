@@ -1,0 +1,82 @@
+% University of Minho doctoral thesis (LaTeX base), following Despacho RT-80/2026.
+% Fields in double braces are filled by `atw template apply` from thesis.toml ([project] and [template]).
+% Compile with XeLaTeX or LuaLaTeX (fontspec), e.g. `tectonic dissertation.tex`.
+\documentclass[12pt,a4paper,fleqn,twoside,openright]{report}
+\usepackage{dissertation}
+\makeglossaries
+\makeindex
+
+\input{preamble/Acronyms}
+
+% School logo ids (images/logos/<id>.jpg): EE Engineering · EC Sciences · ED Law · EEG Economics and Management ·
+% EM Medicine · ESE Nursing · EP Psychology · ICS Social Sciences · IE Education · ELACH Arts and Humanities ·
+% EAAD Architecture, Art and Design · I3Bs
+\logo{{{school_logo}}}{{{school}}}{}
+\logoB{{{school_logo}}}{{{school}}}{}
+
+\thesisauthor{{{author}}}
+\titleA{{{title_a}}}
+\titleB{{{title_b}}}
+\titleC{{{title_c}}}
+
+\phd{{{programme}}}
+{{area_line}}
+\supervisor{{{supervisor}}}
+{{cosupervisor_line}}
+
+\bibpunct[,]{(}{)}{;}{a}{,}{,}
+
+\begin{document}
+\setlength{\parindent}{0em}
+
+%-- Covers
+\input{covers/Covers}
+
+%-- Document setup
+\newgeometry{right=25mm, left=25mm, top=25mm, bottom=25mm}
+\pagenumbering{roman}
+\setlength{\parskip}{0pt}
+\setlength{\parindent}{0pt}
+
+%-- Preamble
+\input{preamble/Copyright}
+\input{preamble/Acknowledgements}
+\input{preamble/StatementofIntegrity}
+\input{preamble/Abstract}
+
+\phantomsection
+\tableofcontents
+
+\cleardoublepage
+\listoffigures
+
+\renewcommand*{\listtablename}{List of Tables}
+\listoftables
+\clearpage
+
+\printglossary[type=\acronymtype,nonumberlist, title={Acronyms}]
+
+\cleardoublepage
+\pagenumbering{arabic}
+
+%-- Chapters (atw writes one \input per chapter file found in chapters/)
+%% ATW:CHAPTERS
+{{chapters}}
+%% /ATW:CHAPTERS
+
+\renewcommand{\baselinestretch}{1}
+\bibliographystyle{plainnat}
+\bibliography{{{bib_name}}}
+\printindex
+
+\appendix
+\renewcommand\chaptername{Appendix}
+\part{Appendices}
+\input{appendices/SupportWork}
+\input{appendices/DetailsOfResults}
+\input{appendices/Listings}
+\input{appendices/Tooling}
+
+\input{covers/BackCover}
+
+\end{document}

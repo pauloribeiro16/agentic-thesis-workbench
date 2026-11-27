@@ -34,6 +34,30 @@ no_year_keys = []                     # e.g. ["GDPR", "AI Act"] — cited as (GD
 [citations.aliases]                   # shorthand in the text -> bibliography key
 # "nist, 2024" = "NISTCSF2024"
 
+# Reference managers: `atw library sync` writes the library to csl_file (and bib_export) — see README
+# provider = "zotero"                 # or "mendeley"
+# bib_export = "latex/references.bib"
+# [citations.zotero]
+# mode = "local"                      # local (Zotero 7 here) | web (library_id + ZOTERO_API_KEY)
+# library_type = "user"               # user | group
+# library_id = ""
+# collection = ""                     # optional collection key
+# [citations.mendeley]
+# mode = "file"                       # file (BibTeX/RIS export) | api (MENDELEY_ACCESS_TOKEN)
+# file = "mendeley.bib"
+
+[output]                              # the thesis document: base and template (atw template list)
+base = "latex"                        # latex | word
+template = ""                         # e.g. "uminho-phd"
+dir = "latex"
+
+[template]                            # fields of the template; [project] gives author and title
+# school = "School of Engineering"
+# school_logo = "EE"
+# programme = "Doctoral Programme in …"
+# supervisor = "…"
+# cosupervisor = ""
+
 [agents]
 dialogue_dir = ".thesis/dialogue"
 dialogue_profile = "en"               # en | pt-legacy
