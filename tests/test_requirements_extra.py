@@ -215,6 +215,7 @@ class Template(unittest.TestCase):
         for macro in ("thesisauthor", "titleA", "titleB", "titleC", "phd", "supervisor"):
             self.assertRegex(main, rf"\\{macro}\{{\{{\{{[a-z_]+\}}\}}\}}", macro)
         self.assertEqual([p.name for p in latex.rglob("*") if p.suffix.lower() in (".ttf", ".otf")], [])
+        self.assertEqual([p.name for p in latex.rglob("*.bib")], [])   # example bibliography ships as .bib.in
         acr = (latex / "preamble" / "Acronyms.tex").read_text()
         self.assertEqual(sum(1 for l in acr.splitlines() if l.startswith(r"\newacronym")), 1)
 

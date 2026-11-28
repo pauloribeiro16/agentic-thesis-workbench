@@ -183,7 +183,11 @@ def _apply_latex(src: Path, out: Path, spec: dict[str, Any], values: dict[str, s
         if not f.is_file() or (f.parent == src and f.name == main_name):
             continue
         rel = f.relative_to(src)
-        if (rel.parts[0] == "chapters" and has_chapters) or (f.suffix == ".bib" and f.parent == src and has_bib):
+        # Example files ship as "<name>.in" (e.g. references.bib.in) so a copy of the workbench carries no live
+        # bibliography — theses often protect every .bib — and become "<name>" in the thesis.
+        if f.suffix == ".in":
+            rel = rel.with_suffix("")
+        if (rel.parts[0] == "chapters" and has_chapters) or (rel.suffix == ".bib" and len(rel.parts) == 1 and has_bib):
             continue  # the example chapter and bibliography are only for a new thesis
         dest = out / rel
         if not dest.exists():  # never overwrite the author's files
