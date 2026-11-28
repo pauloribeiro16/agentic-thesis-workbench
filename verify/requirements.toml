@@ -487,7 +487,7 @@ verified_by = ["test:tests/test_api_cli.py::Api::test_paths_stay_inside_the_thes
 [[req]]
 id = "RF-OUT-05"
 area = "Templates"
-text = "The UMinho doctoral template carries no personal or thesis data, no font files and no live .bib (its example bibliography ships as references.bib.in)."
+text = "The UMinho doctoral template carries no personal or thesis data, no font files and no live .bib or citing .tex (its example bibliography and chapter ship as .in files)."
 source = "atw/templates/uminho-phd"
 verified_by = ["test:tests/test_requirements_extra.py::Template::test_no_personal_or_thesis_data"]
 

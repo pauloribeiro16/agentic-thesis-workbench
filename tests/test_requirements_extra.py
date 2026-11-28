@@ -216,6 +216,8 @@ class Template(unittest.TestCase):
             self.assertRegex(main, rf"\\{macro}\{{\{{\{{[a-z_]+\}}\}}\}}", macro)
         self.assertEqual([p.name for p in latex.rglob("*") if p.suffix.lower() in (".ttf", ".otf")], [])
         self.assertEqual([p.name for p in latex.rglob("*.bib")], [])   # example bibliography ships as .bib.in
+        citing = [p.name for p in latex.rglob("*.tex") if "\\cite" in p.read_text()]
+        self.assertEqual(citing, [])                                  # the example chapter ships as .tex.in
         acr = (latex / "preamble" / "Acronyms.tex").read_text()
         self.assertEqual(sum(1 for l in acr.splitlines() if l.startswith(r"\newacronym")), 1)
 
