@@ -271,7 +271,7 @@ class TestCommentsAndTasks(Base):
                                                "agent": {"name": "Agent Z"}, "applied": [{"comment_id": cid}]}))
         ok, errs = ts.validate(impl["id"])
         self.assertFalse(ok)                                   # text not changed yet
-        self.assertIn("not in", errs[0])
+        self.assertIn("does not show the approved change", errs[0])
         (self.ws / self.rel).write_text(self.raw.replace(quote, "NEW TEXT", 1), encoding="utf-8")
         ok, errs = ts.validate(impl["id"])
         self.assertTrue(ok, errs)

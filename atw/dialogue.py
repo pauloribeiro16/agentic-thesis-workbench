@@ -23,7 +23,7 @@ RE_QBLOCK = re.compile(rf"^\*\*({QID})\b\s*[—–-]?\s*(.*?)\*\*\s*$")
 RE_ROW = re.compile(rf"^\|\s*\**`?({QID})`?\**\s*\|")
 RE_DATE = re.compile(r"(\d{4}-\d{2}-\d{2})")
 NEED_STATES = {"AGENT_CONSENSUS", "AGENT_DEADLOCK", "AUTHOR_RESERVED", "SINGLE_PROPOSAL"}
-AUTHOR_ONLY_STATES = {"APPROVED"}
+AUTHOR_ONLY_STATES = {"APPROVED", "REJECTED"}  # terminal decisions: only a sealed author decision (verify/Governance.tla)
 
 
 @dataclass(frozen=True)

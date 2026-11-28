@@ -133,6 +133,15 @@ tokens are read from the environment or `~/.config/agentic-thesis-workbench/cred
 For Zotero local mode, enable *Settings → Advanced → Allow other applications on this computer to communicate with
 Zotero*.
 
+## Formal verification
+
+Every capability is a requirement in [`verify/requirements.toml`](verify/requirements.toml) (130, one per quality
+check included), each linked to what verifies it — see [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md). Governance,
+comments, change proposals and task validation are TLA+ models proved by TLC over every reachable state; conformance
+tests replay every row of each model's table on the real code. The rest is covered by property tests, every quality
+check both ways, and API/CLI/security tests. `verify/run.sh` runs it all; [verify/README.md](verify/README.md) lists
+what each model proves and the ten defects the verification found and fixed.
+
 ## Quick start
 
 ```bash
@@ -150,7 +159,7 @@ python3 -m atw review validate T-001 --workspace /path/to/thesis
 python3 -m atw roles export --to claude --workspace /path/to/thesis   # or: skills | markdown
 ```
 
-Run the tests: `python3 -m unittest discover -s tests`.
+Run the tests: `python3 -m unittest discover -s tests` · full verification: `verify/run.sh` (needs TLC).
 
 ## Layout
 

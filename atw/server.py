@@ -534,7 +534,13 @@ def make_handler(app: WorkbenchApp):
             if not self._guard():
                 return
             path = urlparse(self.path).path
-            if "application/json" not in self.headers.get("Content-Type", ""):
+            # Actions only from this machine's own pages: a sandboxed iframe on any site sends "Origin: null", and a
+            # "text/plain; …=application/json" body needs no CORS preflight — either would let a web page act (and
+            # seal approvals) through the author's browser. The JSON media type must be exact.
+            if self.headers.get("Origin") == "null":
+                return self._json({"error": "forbidden origin"}, HTTPStatus.FORBIDDEN)
+            media = self.headers.get("Content-Type", "").split(";")[0].strip().lower()
+            if media != "application/json":
                 return self._json({"error": "Content-Type must be application/json"}, HTTPStatus.UNSUPPORTED_MEDIA_TYPE)
             length = int(self.headers.get("Content-Length", "0") or "0")
             if length > MAX_BODY:

@@ -138,6 +138,8 @@ class TaskService:
         task = self.get(tid)
         if not task:
             return False, [f"{tid}: task not found"]
+        if task.get("status") == "done":  # verify/TaskValidation.tla: an output takes effect once; done is final
+            return True, []
         out_path = self.cfg.workspace / task["output"]
         if not out_path.is_file():
             return False, [f"output not written yet: {task['output']}"]
@@ -179,6 +181,9 @@ class TaskService:
                     e.append(f"findings[{i}].problem is required")
         elif expected == "proposals":
             for i, p in enumerate(doc.get("proposals") or []):
+                if p.get("comment_id") and not task.get("chapter"):
+                    e.append(f"proposals[{i}]: answers a comment, but the task has no chapter")
+                    continue
                 if files and p.get("file") not in files:
                     e.append(f"proposals[{i}].file is not part of the task")
                     continue

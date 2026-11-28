@@ -16,7 +16,8 @@ UK = (r"modelling|modelled|behaviour\w*|organis\w+|analys(?:e|ed|es|ing)|artefac
       r"catalogu(?:e|es|ed|ing)|centres?|favour\w*|colours?|recognis\w+|summaris\w+|prioritis\w+|minimis\w+|"
       r"maximis\w+|utilis\w+|characteris\w+|categoris\w+|formalis\w+|standardis\w+|optimis\w+|authoris\w+|"
       r"emphasis(?:e|ed|es|ing)|realis(?:e|ed|es|ing)")
-RE_FIRST = re.compile(r"\b(?:we|our|ours|us|I|my|mine)\b")
+# capitalised forms too ("We show…" opens many sentences); "US" (the country) and lowercase "i" are not pronouns
+RE_FIRST = re.compile(r"\b(?:[Ww]e|[Oo]urs?|[Uu]s|I|[Mm]y|[Mm]ine)\b")
 RE_SENT = re.compile(r"[^.!?]+(?:[.!?]+|$)")
 RE_QUOTED = re.compile(r"\"[^\"\n]*\"|“[^”\n]*”|«[^»\n]*»")
 

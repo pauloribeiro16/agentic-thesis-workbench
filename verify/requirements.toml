@@ -1,0 +1,705 @@
+# Requirements of the Agentic Thesis Workbench — the single list every verification links to.
+#
+# Each requirement: id, area, statement, source (where the code implements it) and `verified_by`, a list of links:
+#   "tla:<Module>.tla#<Operator>@<config>.cfg"   an invariant/property that TLC proves with that configuration
+#   "test:<file>::<Class>::<method>"             a test (conformance, property or example)
+# The quality checks are requirements too: RF-QL-<check id>, generated from the check registry (verify/trace.py),
+# each verified by tests/test_checks_each.py::Checks::test_<check id>.
+#
+# verify/trace.py checks that every link resolves and writes docs/REQUIREMENTS.md; tests/test_traceability.py fails
+# when a requirement has no verification, a link is broken, a check has no requirement, or the document is stale.
+
+# ---------------------------------------------------------------------------------------------------------------
+# Configuration and plan
+[[req]]
+id = "RF-CFG-01"
+area = "Configuration"
+text = "Without thesis.toml the workbench detects the chapters and the bibliography; thesis.toml only says where things are."
+source = "atw/config.py: load_config, _auto_detect"
+verified_by = ["test:tests/test_requirements_extra.py::Config::test_autodetect_without_thesis_toml"]
+
+[[req]]
+id = "RF-CFG-02"
+area = "Configuration"
+text = "Targets, structure, narrative and writing rules come only from the author's plan (.thesis/plan.toml); the engine has no limits of its own and an unset rule reports 'not configured'."
+source = "atw/config.py: plan loading; checks return 'not configured'"
+verified_by = ["test:tests/test_workbench.py::TestPlanSeparation::test_engine_has_no_limits_of_its_own",
+               "test:tests/test_workbench.py::TestPlanSeparation::test_plan_file_sets_chapters_pages_words_narrative"]
+
+[[req]]
+id = "RF-CFG-03"
+area = "Configuration"
+text = "The interface is available in English and Portuguese with the same texts; data, files and code stay in English."
+source = "web/i18n/en.json, web/i18n/pt.json"
+verified_by = ["test:tests/test_workbench.py::TestRolesCliI18n::test_i18n_files_have_the_same_keys",
+               "test:tests/test_api_cli.py::WebClient::test_every_text_exists_in_both_languages"]
+
+[[req]]
+id = "RF-CFG-04"
+area = "Configuration"
+text = "A minimal thesis (no targets, no plan) loads in every view without errors."
+source = "atw/config.py: to_public_dict"
+verified_by = ["test:tests/test_requirements_extra.py::Config::test_minimal_thesis_loads_everywhere"]
+
+[[req]]
+id = "RF-CFG-05"
+area = "Configuration"
+text = "The engine contains no project-specific names; everything specific to a thesis lives in that thesis."
+source = "atw/"
+verified_by = ["test:tests/test_workbench.py::TestRolesCliI18n::test_engine_has_no_project_specific_names"]
+
+# ---------------------------------------------------------------------------------------------------------------
+# Manuscript and formats
+[[req]]
+id = "RF-FMT-01"
+area = "Manuscript"
+text = "Chapters are found by chapters_glob, numbered from their path and grouped with one section per file; Markdown, Markdown+LaTeX, Quarto and LaTeX layouts are read."
+source = "atw/formats.py: FormatAdapter, LatexAdapter; atw/builtin/formats.py"
+verified_by = ["test:tests/test_requirements_extra.py::Config::test_autodetect_without_thesis_toml",
+               "test:tests/test_workbench.py::TestPluginsAndChecks::test_builtin_registry_and_local_plugin_isolation"]
+
+[[req]]
+id = "RF-FMT-02"
+area = "Manuscript"
+text = "Word counts include only prose and lists: no headings, tables, captions, citations or code."
+source = "atw/formats.py: count_words, strip_citations"
+verified_by = ["test:tests/test_workbench.py::TestPluginsAndChecks::test_word_count_excludes_headings_tables_and_citations"]
+
+# ---------------------------------------------------------------------------------------------------------------
+# Comments
+[[req]]
+id = "RF-COM-01"
+area = "Comments"
+text = "The author comments on a passage of a chapter file (exact text or a selection in the rendered view); a passage not in the file, or a file outside the chapter, is refused."
+source = "atw/comments.py: CommentService._add, _anchor"
+verified_by = ["test:tests/test_requirements_extra.py::CommentsAndChanges::test_add_needs_text_in_the_chapter",
+               "test:tests/test_workbench.py::TestCommentsAndTasks::test_anchor_from_rendered_selection_and_fuzzy_reanchor"]
+
+[[req]]
+id = "RF-COM-02"
+area = "Comments"
+text = "A comment re-anchors exactly while its passage is there, fuzzily (>= 75 % similar) after edits, and becomes an orphan when the passage is gone."
+source = "atw/comments.py: locate"
+verified_by = ["test:tests/test_properties.py::AnchorProperties::test_anchoring",
+               "test:tests/test_workbench.py::TestCommentsAndTasks::test_anchor_from_rendered_selection_and_fuzzy_reanchor"]
+
+[[req]]
+id = "RF-COM-03"
+area = "Comments"
+text = "Only the author approves, resolves or rejects a comment."
+source = "atw/comments.py: CommentService.apply (status, accept)"
+verified_by = ["tla:CommentLifecycle.tla#OnlyAuthorDecides@CommentLifecycle.cfg",
+               "test:tests/test_conformance_comments.py::CommentConformance::test_every_sequence_matches_the_model"]
+
+[[req]]
+id = "RF-COM-04"
+area = "Comments"
+text = "An agent can only bring a comment to 'addressed' (a before/after proposal through a validated task output)."
+source = "atw/comments.py: set_proposal; atw/tasks.py: _apply_effects"
+verified_by = ["tla:CommentLifecycle.tla#AgentOnlyProposes@CommentLifecycle.cfg",
+               "test:tests/test_conformance_comments.py::CommentConformance::test_every_sequence_matches_the_model"]
+
+[[req]]
+id = "RF-COM-05"
+area = "Comments"
+text = "Accepting seals the proposal with the author's key, and only a proposal whose passage is in the text exactly once can be accepted; editing a sealed proposal invalidates the seal."
+source = "atw/comments.py: apply (accept), _approve, _proposal_sealed"
+verified_by = ["tla:CommentLifecycle.tla#ApprovedIsSealedOrTampered@CommentLifecycle.cfg",
+               "test:tests/test_conformance_comments.py::CommentConformance::test_every_sequence_matches_the_model",
+               "test:tests/test_workbench.py::TestCommentsAndTasks::test_full_closing_cycle_with_agents"]
+
+[[req]]
+id = "RF-COM-06"
+area = "Comments"
+text = "An implementer can mark as applied only a change the author approved and whose seal verifies."
+source = "atw/comments.py: mark_applied"
+verified_by = ["tla:CommentLifecycle.tla#AppliedWasSealed@CommentLifecycle.cfg",
+               "test:tests/test_conformance_comments.py::CommentConformance::test_every_sequence_matches_the_model"]
+
+[[req]]
+id = "RF-COM-07"
+area = "Comments"
+text = "'Applied' requires the text to show the change: the replacement is in the file and the replaced passage is gone — deletions (empty replacement) included."
+source = "atw/comments.py: text_shows, mark_applied"
+verified_by = ["tla:CommentLifecycle.tla#AppliedMeansEdited@CommentLifecycle.cfg",
+               "test:tests/test_conformance_comments.py::CommentConformance::test_every_sequence_matches_the_model",
+               "test:tests/test_conformance_comments.py::CommentConformance::test_text_rule_in_code_is_the_proved_one",
+               "test:tests/test_properties.py::TextShowsProperties::test_definition"]
+
+[[req]]
+id = "RF-COM-08"
+area = "Comments"
+text = "A suggestion written by the author (S) is approved and sealed on creation."
+source = "atw/comments.py: _add (kind suggest)"
+verified_by = ["test:tests/test_workbench.py::TestCommentsAndTasks::test_author_suggestion_is_sealed_on_creation"]
+
+[[req]]
+id = "RF-COM-09"
+area = "Comments"
+text = "The author can delete only comments they wrote; others are closed (resolved / won't do)."
+source = "atw/comments.py: apply (delete)"
+verified_by = ["test:tests/test_requirements_extra.py::CommentsAndChanges::test_delete_only_own"]
+
+[[req]]
+id = "RF-COM-10"
+area = "Comments"
+text = "The 'To close' queue lists exactly the comments waiting for the author: answered by an agent, or applied and to confirm."
+source = "atw/comments.py: queue"
+verified_by = ["test:tests/test_requirements_extra.py::CommentsAndChanges::test_queue_lists_what_waits_for_the_author"]
+
+# ---------------------------------------------------------------------------------------------------------------
+# Change proposals
+[[req]]
+id = "RF-CHG-01"
+area = "Change proposals"
+text = "An agent's proposals not tied to a comment become pending change proposals."
+source = "atw/changes.py: add_proposal; atw/tasks.py: _apply_effects"
+verified_by = ["test:tests/test_workbench.py::TestChangesAndPages::test_agent_proposals_without_comment_become_changes"]
+
+[[req]]
+id = "RF-CHG-02"
+area = "Change proposals"
+text = "Only the author approves or rejects a change; approving needs its old text exactly once in the file and seals it."
+source = "atw/changes.py: apply (decide)"
+verified_by = ["tla:ChangeLifecycle.tla#OnlyAuthorDecides@ChangeLifecycle.cfg",
+               "test:tests/test_conformance_changes.py::ChangeConformance::test_every_sequence_matches_the_model",
+               "test:tests/test_conformance_changes.py::ChangeConformance::test_rule_in_code_is_the_proved_one"]
+
+[[req]]
+id = "RF-CHG-03"
+area = "Change proposals"
+text = "A change reaches the text (status applied) only after a sealed approval."
+source = "atw/changes.py: mark_applied"
+verified_by = ["tla:ChangeLifecycle.tla#AppliedWasSealed@ChangeLifecycle.cfg",
+               "test:tests/test_conformance_changes.py::ChangeConformance::test_every_sequence_matches_the_model"]
+
+[[req]]
+id = "RF-CHG-04"
+area = "Change proposals"
+text = "'Applied' requires the file to show the change — deletions included, and a tampered item cannot pass."
+source = "atw/changes.py: mark_applied; atw/comments.py: text_shows"
+verified_by = ["tla:ChangeLifecycle.tla#AppliedMeansEdited@ChangeLifecycle.cfg",
+               "test:tests/test_conformance_changes.py::ChangeConformance::test_every_sequence_matches_the_model",
+               "test:tests/test_properties.py::TextShowsProperties::test_definition"]
+
+[[req]]
+id = "RF-CHG-05"
+area = "Change proposals"
+text = "Once registered in its dialogue thread a decision is final: no later decide or review changes it."
+source = "atw/changes.py: apply (decide, review)"
+verified_by = ["tla:ChangeLifecycle.tla#RegisteredIsFinal@ChangeLifecycle.cfg",
+               "test:tests/test_conformance_changes.py::ChangeConformance::test_every_sequence_matches_the_model"]
+
+[[req]]
+id = "RF-CHG-06"
+area = "Change proposals"
+text = "Only decided changes (approved, rejected, kept or contested) are registered."
+source = "atw/changes.py: _register"
+verified_by = ["tla:ChangeLifecycle.tla#RegisteredWasDecided@ChangeLifecycle.cfg",
+               "test:tests/test_conformance_changes.py::ChangeConformance::test_every_sequence_matches_the_model"]
+
+[[req]]
+id = "RF-CHG-07"
+area = "Change proposals"
+text = "Register appends one sealed moderator block per thread listing the decisions; the preview writes nothing; applied changes are kept, contested or undone by the author."
+source = "atw/changes.py: _register, apply (review)"
+verified_by = ["test:tests/test_workbench.py::TestChangesAndPages::test_verdicts_decisions_seal_register_and_implementer",
+               "test:tests/test_conformance_changes.py::ChangeConformance::test_every_sequence_matches_the_model"]
+
+[[req]]
+id = "RF-CHG-08"
+area = "Change proposals"
+text = "Each proposal shows whether its text is in the file exactly once, missing or ambiguous."
+source = "atw/changes.py: load (anchor)"
+verified_by = ["test:tests/test_requirements_extra.py::CommentsAndChanges::test_change_anchor_states"]
+
+# ---------------------------------------------------------------------------------------------------------------
+# Dialogue and governance
+[[req]]
+id = "RF-GOV-01"
+area = "Governance"
+text = "A question is approved only by the author's decision, sealed when signing is on."
+source = "atw/dialogue.py: parse_thread, _apply"
+verified_by = ["tla:Governance.tla#ApprovedByAuthor@Governance_signed.cfg",
+               "tla:Governance.tla#ApprovedByAuthor@Governance_unsigned.cfg",
+               "test:tests/test_conformance_governance.py::GovernanceConformance::test_signed",
+               "test:tests/test_conformance_governance.py::GovernanceConformance::test_unsigned"]
+
+[[req]]
+id = "RF-GOV-02"
+area = "Governance"
+text = "A question is rejected only by the author's decision (agents cannot close a question as rejected)."
+source = "atw/dialogue.py: AUTHOR_ONLY_STATES, _apply"
+verified_by = ["tla:Governance.tla#RejectedByAuthor@Governance_signed.cfg",
+               "tla:Governance.tla#RejectedByAuthor@Governance_unsigned.cfg",
+               "test:tests/test_conformance_governance.py::GovernanceConformance::test_code_constant_is_the_proved_one",
+               "test:tests/test_conformance_governance.py::GovernanceConformance::test_signed"]
+
+[[req]]
+id = "RF-GOV-03"
+area = "Governance"
+text = "After a sealed approval no agent write moves the question."
+source = "atw/dialogue.py: _apply"
+verified_by = ["tla:Governance.tla#ApprovalSticks@Governance_signed.cfg",
+               "test:tests/test_conformance_governance.py::GovernanceConformance::test_signed",
+               "test:tests/test_workbench.py::TestGovernance::test_sealed_decision_approves_and_agents_cannot_reopen"]
+
+[[req]]
+id = "RF-GOV-04"
+area = "Governance"
+text = "No agent write ever moves a question into an author-only state."
+source = "atw/dialogue.py: _apply"
+verified_by = ["tla:Governance.tla#AgentNeverSetsAuthorOnly@Governance_signed.cfg",
+               "tla:Governance.tla#AgentNeverSetsAuthorOnly@Governance_unsigned.cfg",
+               "test:tests/test_conformance_governance.py::GovernanceConformance::test_unsigned"]
+
+[[req]]
+id = "RF-GOV-05"
+area = "Governance"
+text = "A refused write (an agent's approval, an unsealed decision) is recorded as an unauthorised claim, never silently dropped."
+source = "atw/dialogue.py: _apply (unauthorized_claims)"
+verified_by = ["tla:Governance.tla#RefusalCounted@Governance_signed.cfg",
+               "test:tests/test_conformance_governance.py::GovernanceConformance::test_signed",
+               "test:tests/test_workbench.py::TestGovernance::test_agents_cannot_approve_and_unsealed_decisions_do_not_count"]
+
+[[req]]
+id = "RF-GOV-06"
+area = "Governance"
+text = "Decisions are appended to the thread (never rewriting earlier turns) and a thread changed meanwhile is refused (conflict)."
+source = "atw/dialogue.py: append_decision"
+verified_by = ["test:tests/test_requirements_extra.py::Dialogue::test_append_only_with_conflict_detection"]
+
+[[req]]
+id = "RF-GOV-07"
+area = "Governance"
+text = "Only Markdown threads inside the dialogue folder can be written."
+source = "atw/dialogue.py: append_decision, append_message"
+verified_by = ["test:tests/test_requirements_extra.py::Dialogue::test_threads_only_inside_the_dialogue_folder"]
+
+[[req]]
+id = "RF-GOV-08"
+area = "Governance"
+text = "The pt-legacy profile reads and writes Portuguese threads (Vez, Deliberação, CONCORDO, APROVADA…)."
+source = "atw/dialogue.py: PROFILES['pt-legacy']"
+verified_by = ["test:tests/test_workbench.py::TestGovernance::test_pt_legacy_profile_reads_and_writes_portuguese_threads"]
+
+# ---------------------------------------------------------------------------------------------------------------
+# Seals and keys
+[[req]]
+id = "RF-SEAL-01"
+area = "Seals"
+text = "The signing key is never created implicitly: without it an approval is refused (nothing is written), and require_key_path forbids the default location."
+source = "atw/dialogue.py: ModeratorSeal.require_key, SealKeyMissing"
+verified_by = ["test:tests/test_api_cli.py::Cli::test_keys",
+               "test:tests/test_workbench.py::TestSigningKey::test_never_creates_a_second_key_silently",
+               "test:tests/test_workbench.py::TestSigningKey::test_require_key_path_ignores_the_default_location"]
+
+[[req]]
+id = "RF-SEAL-02"
+area = "Seals"
+text = "Any change to a sealed decision block or approval payload, or another thread or key, makes the seal fail."
+source = "atw/dialogue.py: ModeratorSeal.mac, verify, verify_payload"
+verified_by = ["test:tests/test_properties.py::SealProperties::test_block_tamper_is_detected",
+               "test:tests/test_properties.py::SealProperties::test_payload_tamper_is_detected",
+               "test:tests/test_properties.py::SealProperties::test_other_key_does_not_verify",
+               "test:tests/test_workbench.py::TestGovernance::test_tampered_seal_is_rejected"]
+
+[[req]]
+id = "RF-SEAL-03"
+area = "Seals"
+text = "atw key init creates the key once with mode 0600 and never replaces it; tools sharing a key agree on every seal."
+source = "atw/__main__.py: key; atw/dialogue.py: create_key"
+verified_by = ["test:tests/test_api_cli.py::Cli::test_keys",
+               "test:tests/test_workbench.py::TestSigningKey::test_two_tools_with_the_same_key_agree"]
+
+# ---------------------------------------------------------------------------------------------------------------
+# Agents: roles, tasks, reviews
+[[req]]
+id = "RF-TSK-01"
+area = "Agents"
+text = "Tasks are JSON packets for one role or a workflow (a parent with one child per role) that close the parent when every child is done."
+source = "atw/tasks.py: create"
+verified_by = ["test:tests/test_workbench.py::TestCommentsAndTasks::test_full_closing_cycle_with_agents"]
+
+[[req]]
+id = "RF-TSK-02"
+area = "Agents"
+text = "An agent output is validated before it has any effect: task, kind, role, agent, independence, severities, files of the task, quotes present exactly once."
+source = "atw/tasks.py: _check_doc"
+verified_by = ["test:tests/test_workbench.py::TestCommentsAndTasks::test_review_validation_and_agent_review_check",
+               "test:tests/test_conformance_tasks.py::TaskConformance::test_every_sequence_matches_the_model"]
+
+[[req]]
+id = "RF-TSK-03"
+area = "Agents"
+text = "An implementer task receives only approved and sealed changes, and may report only those."
+source = "atw/tasks.py: _packet, _check_doc (applied)"
+verified_by = ["test:tests/test_workbench.py::TestCommentsAndTasks::test_full_closing_cycle_with_agents",
+               "test:tests/test_workbench.py::TestChangesAndPages::test_verdicts_decisions_seal_register_and_implementer"]
+
+[[req]]
+id = "RF-TSK-04"
+area = "Agents"
+text = "An output takes effect at most once, however often it is validated."
+source = "atw/tasks.py: validate"
+verified_by = ["tla:TaskValidation.tla#EffectsAtMostOnce@TaskValidation.cfg",
+               "test:tests/test_conformance_tasks.py::TaskConformance::test_every_sequence_matches_the_model"]
+
+[[req]]
+id = "RF-TSK-05"
+area = "Agents"
+text = "A task is done only if a valid output took effect, and a done task stays done."
+source = "atw/tasks.py: validate, _set_status"
+verified_by = ["tla:TaskValidation.tla#DoneMeansEffect@TaskValidation.cfg",
+               "tla:TaskValidation.tla#DoneStaysDone@TaskValidation.cfg",
+               "test:tests/test_conformance_tasks.py::TaskConformance::test_every_sequence_matches_the_model"]
+
+[[req]]
+id = "RF-TSK-06"
+area = "Agents"
+text = "Roles (ROLE.md) are exported as Claude Code sub-agents, Agent Skills or plain prompts."
+source = "atw/roles.py: export"
+verified_by = ["test:tests/test_api_cli.py::Cli::test_roles_export_formats",
+               "test:tests/test_workbench.py::TestRolesCliI18n::test_roles_front_matter_and_export"]
+
+[[req]]
+id = "RF-TSK-07"
+area = "Agents"
+text = "A proposal that answers a comment in a task without a chapter is reported, not silently ignored."
+source = "atw/tasks.py: _check_doc"
+verified_by = ["test:tests/test_requirements_extra.py::Tasks::test_comment_answer_needs_a_chapter"]
+
+# ---------------------------------------------------------------------------------------------------------------
+# Quality checks (one requirement per check is generated: RF-QL-<id>)
+[[req]]
+id = "RF-QL-00"
+area = "Quality"
+text = "Checks come from plugins (built-in, installed or local), report per thesis, chapter and section with no global score, each naming its rule; a failing check shows 'error' without stopping the others; every check has a test."
+source = "atw/plugins.py, atw/quality.py"
+verified_by = ["test:tests/test_checks_each.py::CatalogueIsCovered::test_every_check_has_a_test",
+               "test:tests/test_workbench.py::TestPluginsAndChecks::test_builtin_registry_and_local_plugin_isolation"]
+
+# ---------------------------------------------------------------------------------------------------------------
+# Citations and literature
+[[req]]
+id = "RF-CIT-01"
+area = "Citations"
+text = "The bibliography is read from BibTeX, CSL-JSON, or a Zotero / Mendeley sync."
+source = "atw/citations.py: _parse_bibtex, _parse_csl_json; atw/builtin/formats.py"
+verified_by = ["test:tests/test_workbench.py::TestPluginsAndChecks::test_citations",
+               "test:tests/test_output_library.py::LibraryTests::test_zotero_local_sync_paginates_and_writes_csl_and_bib"]
+
+[[req]]
+id = "RF-CIT-02"
+area = "Citations"
+text = "In-text citations resolve to one work in author-year, pandoc or LaTeX syntax, with aliases and keys cited without a year."
+source = "atw/citations.py: CitationIndex.resolve, uses_in"
+verified_by = ["test:tests/test_requirements_extra.py::Citations::test_syntaxes_and_aliases"]
+
+[[req]]
+id = "RF-CIT-03"
+area = "Citations"
+text = "A verified passage is re-hashed on every check, so an edited source shows up as a problem."
+source = "atw/citations.py: passage_state"
+verified_by = ["test:tests/test_requirements_extra.py::Citations::test_ledger_detects_an_altered_source"]
+
+[[req]]
+id = "RF-CIT-04"
+area = "Citations"
+text = "Each archived source is compared with its entry: confirmed (>= 70 % of title words), doubtful (>= 40 %), mismatch, no text, no source."
+source = "atw/citations.py: title_match, enrich_works"
+verified_by = ["test:tests/test_requirements_extra.py::Citations::test_source_matches_entry_thresholds"]
+
+[[req]]
+id = "RF-CIT-05"
+area = "Citations"
+text = "With an integrity manifest each work's files are intact, changed or not sealed."
+source = "atw/citations.py: enrich_works"
+verified_by = ["test:tests/test_requirements_extra.py::Citations::test_integrity_manifest"]
+
+# ---------------------------------------------------------------------------------------------------------------
+# Pages and compilation
+[[req]]
+id = "RF-PG-01"
+area = "Pages"
+text = "The page budget comes from the last PDF (also compressed page trees) and each chapter's own words per page, citations left out."
+source = "atw/pages.py: pdf_page_count, budget, thesis_budgets"
+verified_by = ["test:tests/test_workbench.py::TestPluginsAndChecks::test_pdf_page_count_inside_compressed_stream",
+               "test:tests/test_workbench.py::TestChangesAndPages::test_page_budget_uses_the_chapters_own_words_per_page"]
+
+[[req]]
+id = "RF-PG-02"
+area = "Pages"
+text = "Compiling runs only the command configured in thesis.toml, with {chapter} filled in, in the background."
+source = "atw/server.py: WorkbenchApp.compile"
+verified_by = ["test:tests/test_requirements_extra.py::Pages::test_compile_runs_only_the_configured_command"]
+
+[[req]]
+id = "RF-PG-03"
+area = "Pages"
+text = "PDFs are read and served only from the configured path."
+source = "atw/pages.py: pdf_path; atw/server.py: /api/pdf"
+verified_by = ["test:tests/test_requirements_extra.py::Pages::test_pdf_only_from_the_configured_path"]
+
+[[req]]
+id = "RF-PG-04"
+area = "Pages"
+text = "Answers come from memory and refresh when a file changes."
+source = "atw/server.py: cached, etag"
+verified_by = ["test:tests/test_workbench.py::TestCache::test_answers_from_memory_and_refreshes_when_a_file_changes"]
+
+# ---------------------------------------------------------------------------------------------------------------
+# Templates and the output base
+[[req]]
+id = "RF-OUT-01"
+area = "Templates"
+text = "Templates are found in the workbench and in the thesis (which overrides by id and can add a base); each base shows whether it is ready."
+source = "atw/output.py: list_templates"
+verified_by = ["test:tests/test_output_library.py::TemplateTests::test_builtin_template_is_listed",
+               "test:tests/test_output_library.py::TemplateTests::test_word_base_needs_the_docx_then_fills_properties"]
+
+[[req]]
+id = "RF-OUT-02"
+area = "Templates"
+text = "Applying the LaTeX base fills the fields (LaTeX-escaped, title split over up to three lines), never overwrites the author's files and later refreshes only the chapter list."
+source = "atw/output.py: apply, _apply_latex, render_latex, split_title"
+verified_by = ["test:tests/test_output_library.py::TemplateTests::test_latex_apply_fills_fields_and_keeps_author_edits",
+               "test:tests/test_output_library.py::TemplateTests::test_example_chapter_not_added_to_existing_thesis",
+               "test:tests/test_properties.py::TemplateApplyProperties::test_never_overwrites",
+               "test:tests/test_properties.py::EscapingProperties::test_latex_escape",
+               "test:tests/test_properties.py::TitleProperties::test_split_title"]
+
+[[req]]
+id = "RF-OUT-03"
+area = "Templates"
+text = "The Word base needs the template .docx; it creates the document, fills title, author and {{field}} placeholders, and replaces the template's 'last modified by'."
+source = "atw/output.py: _apply_word, _core_props"
+verified_by = ["test:tests/test_output_library.py::TemplateTests::test_word_base_needs_the_docx_then_fills_properties"]
+
+[[req]]
+id = "RF-OUT-04"
+area = "Templates"
+text = "Templates are applied only inside the thesis; an unknown template or base is refused with a message."
+source = "atw/output.py: apply"
+verified_by = ["test:tests/test_api_cli.py::Api::test_paths_stay_inside_the_thesis",
+               "test:tests/test_output_library.py::TemplateTests::test_unknown_template"]
+
+[[req]]
+id = "RF-OUT-05"
+area = "Templates"
+text = "The UMinho doctoral template carries no personal or thesis data and no font files."
+source = "atw/templates/uminho-phd"
+verified_by = ["test:tests/test_requirements_extra.py::Template::test_no_personal_or_thesis_data"]
+
+[[req]]
+id = "RF-OUT-06"
+area = "Templates"
+text = "The UMinho LaTeX base compiles (XeLaTeX / tectonic), with or without the NewsGotT fonts."
+source = "atw/templates/uminho-phd/latex"
+verified_by = ["test:tests/test_requirements_extra.py::Template::test_compiles"]
+
+# ---------------------------------------------------------------------------------------------------------------
+# Reference managers
+[[req]]
+id = "RF-LIB-01"
+area = "Reference managers"
+text = "Zotero local mode reads every page of the library (or a collection) without notes or attachments, and explains the setting when Zotero refuses."
+source = "atw/library.py: fetch_zotero"
+verified_by = ["test:tests/test_output_library.py::LibraryTests::test_zotero_local_sync_paginates_and_writes_csl_and_bib",
+               "test:tests/test_output_library.py::LibraryTests::test_zotero_local_403_explains_setting"]
+
+[[req]]
+id = "RF-LIB-02"
+area = "Reference managers"
+text = "Zotero web mode needs a library id and an API key from the environment or the credentials file."
+source = "atw/library.py: fetch_zotero, _secret"
+verified_by = ["test:tests/test_output_library.py::LibraryTests::test_zotero_web_needs_key"]
+
+[[req]]
+id = "RF-LIB-03"
+area = "Reference managers"
+text = "Mendeley API mode follows every page (Link header) with an OAuth token and explains an expired token."
+source = "atw/library.py: fetch_mendeley"
+verified_by = ["test:tests/test_output_library.py::LibraryTests::test_mendeley_api_follows_link_header"]
+
+[[req]]
+id = "RF-LIB-04"
+area = "Reference managers"
+text = "Mendeley file mode reads a BibTeX or RIS export."
+source = "atw/library.py: bibtex_to_csl, ris_to_csl"
+verified_by = ["test:tests/test_output_library.py::LibraryTests::test_mendeley_file_ris_and_bibtex"]
+
+[[req]]
+id = "RF-LIB-05"
+area = "Reference managers"
+text = "Synced citation keys are unique, keep the manager's own key, and are otherwise FamilyYear with a/b/c."
+source = "atw/library.py: assign_keys"
+verified_by = ["test:tests/test_properties.py::KeyProperties::test_unique_and_stable"]
+
+[[req]]
+id = "RF-LIB-06"
+area = "Reference managers"
+text = "The BibTeX export escapes LaTeX special characters and keeps every key."
+source = "atw/library.py: csl_to_bibtex"
+verified_by = ["test:tests/test_properties.py::EscapingProperties::test_bibtex_export_escapes_and_keeps_keys"]
+
+[[req]]
+id = "RF-LIB-07"
+area = "Reference managers"
+text = "Keys and tokens are never written into the thesis."
+source = "atw/library.py: _secret, sync"
+verified_by = ["test:tests/test_requirements_extra.py::LibraryRules::test_secrets_are_never_written"]
+
+[[req]]
+id = "RF-LIB-08"
+area = "Reference managers"
+text = "The connectors only read from the reference manager (no request with a body)."
+source = "atw/library.py: _http"
+verified_by = ["test:tests/test_requirements_extra.py::LibraryRules::test_read_only"]
+
+[[req]]
+id = "RF-LIB-09"
+area = "Reference managers"
+text = "Without a configured reference manager, sync fails with a message instead of guessing."
+source = "atw/library.py: sync"
+verified_by = ["test:tests/test_output_library.py::LibraryTests::test_no_source"]
+
+# ---------------------------------------------------------------------------------------------------------------
+# Command line
+[[req]]
+id = "RF-CLI-01"
+area = "Command line"
+text = "Every command (init, check, task, review, roles, plugins, vendor, key, template, library) runs on a thesis and fails with a message and a non-zero code on invalid input."
+source = "atw/__main__.py: main"
+verified_by = ["test:tests/test_api_cli.py::Cli::test_every_command",
+               "test:tests/test_api_cli.py::Cli::test_invalid_input_fails_with_a_message",
+               "test:tests/test_workbench.py::TestRolesCliI18n::test_init_and_cli"]
+
+[[req]]
+id = "RF-CLI-02"
+area = "Command line"
+text = "init writes thesis.toml, the plan, AGENTS.md, a serve script and .gitignore entries without overwriting existing files."
+source = "atw/__main__.py: cmd_init"
+verified_by = ["test:tests/test_api_cli.py::Cli::test_init_never_overwrites",
+               "test:tests/test_workbench.py::TestGenericTools::test_init_writes_serve_script_and_gitignore"]
+
+[[req]]
+id = "RF-CLI-03"
+area = "Command line"
+text = "vendor copies the runtime (with templates, without examples and tests) into a folder of the thesis, records the source commit and refuses targets outside it."
+source = "atw/vendor.py"
+verified_by = ["test:tests/test_api_cli.py::Cli::test_vendor",
+               "test:tests/test_workbench.py::TestGenericTools::test_vendor_copies_runtime_only_and_records_commit"]
+
+# ---------------------------------------------------------------------------------------------------------------
+# HTTP API and web client
+[[req]]
+id = "RF-API-01"
+area = "API and interface"
+text = "Every read endpoint answers JSON (state, summary, literature, quality, queue, agents, output, config, chapter, context, work, compile, etag) and / serves the app."
+source = "atw/server.py: do_GET"
+verified_by = ["test:tests/test_api_cli.py::Api::test_every_get_endpoint_answers_json",
+               "test:tests/test_workbench.py::TestServerSecurity::test_shell_modes_and_endpoints"]
+
+[[req]]
+id = "RF-API-02"
+area = "API and interface"
+text = "Unknown endpoints and missing items answer 404 with a JSON error."
+source = "atw/server.py"
+verified_by = ["test:tests/test_api_cli.py::Api::test_unknown_and_missing"]
+
+[[req]]
+id = "RF-API-03"
+area = "API and interface"
+text = "Every action endpoint works (decide, comments, changes, tasks, validate, library, template, compile) and a decision on a thread changed meanwhile is refused."
+source = "atw/server.py: do_POST"
+verified_by = ["test:tests/test_api_cli.py::Api::test_post_endpoints"]
+
+[[req]]
+id = "RF-UI-01"
+area = "API and interface"
+text = "The app has its eight views (overview, manuscript, to close, decisions, quality, literature, agents, config), each with a renderer."
+source = "web/app.js, web/index.html"
+verified_by = ["test:tests/test_api_cli.py::WebClient::test_views_exist"]
+
+[[req]]
+id = "RF-UI-02"
+area = "API and interface"
+text = "In Decisions, selecting a question shows only the parts of each turn about it (its block, table rows and decisions; Q1 is not Q10)."
+source = "web/app.js: qExcerpt, decQuestionPanel"
+verified_by = ["test:tests/test_api_cli.py::WebClient::test_question_excerpt"]
+
+[[req]]
+id = "RF-UI-03"
+area = "API and interface"
+text = "Every text the app shows exists in both languages."
+source = "web/app.js, web/i18n"
+verified_by = ["test:tests/test_api_cli.py::WebClient::test_every_text_exists_in_both_languages"]
+
+# ---------------------------------------------------------------------------------------------------------------
+# Non-functional
+[[req]]
+id = "RNF-SEC-01"
+area = "Security"
+text = "Requests whose Host is not this machine are refused (DNS rebinding)."
+source = "atw/server.py: _guard, _host_ok"
+verified_by = ["test:tests/test_api_cli.py::Api::test_host_must_be_local",
+               "test:tests/test_workbench.py::TestServerSecurity::test_host_and_origin_guard"]
+
+[[req]]
+id = "RNF-SEC-02"
+area = "Security"
+text = "Requests with a foreign Origin are refused."
+source = "atw/server.py: _guard"
+verified_by = ["test:tests/test_api_cli.py::Api::test_origin_must_be_local"]
+
+[[req]]
+id = "RNF-SEC-03"
+area = "Security"
+text = "Actions accept only JSON bodies (exact media type) up to 1 MB, refused from the headers."
+source = "atw/server.py: do_POST"
+verified_by = ["test:tests/test_api_cli.py::Api::test_post_rules"]
+
+[[req]]
+id = "RNF-SEC-04"
+area = "Security"
+text = "The server listens on 127.0.0.1 only."
+source = "atw/server.py: run_server"
+verified_by = ["test:tests/test_api_cli.py::ServerBinding::test_binds_loopback"]
+
+[[req]]
+id = "RNF-SEC-05"
+area = "Security"
+text = "Files are read and written only inside the thesis (PDFs of works, threads, templates)."
+source = "atw/server.py, atw/dialogue.py, atw/output.py"
+verified_by = ["test:tests/test_api_cli.py::Api::test_paths_stay_inside_the_thesis",
+               "test:tests/test_requirements_extra.py::Dialogue::test_threads_only_inside_the_dialogue_folder"]
+
+[[req]]
+id = "RNF-SEC-06"
+area = "Security"
+text = "No web page can trigger an action through the author's browser: 'Origin: null' and CORS-safelisted bodies are refused, so nothing is sealed on a third party's behalf."
+source = "atw/server.py: do_POST"
+verified_by = ["test:tests/test_api_cli.py::Api::test_cross_site_post_is_refused"]
+
+[[req]]
+id = "RNF-DEP-01"
+area = "Dependencies"
+text = "The engine uses only the Python standard library."
+source = "atw/"
+verified_by = ["test:tests/test_api_cli.py::NonFunctional::test_standard_library_only"]
+
+[[req]]
+id = "RNF-NET-01"
+area = "Privacy"
+text = "Only the reference-manager connector opens network connections."
+source = "atw/library.py"
+verified_by = ["test:tests/test_api_cli.py::NonFunctional::test_network_only_in_the_library_connector"]
+
+[[req]]
+id = "RNF-VER-01"
+area = "Verification"
+text = "Every requirement has at least one verification, every link resolves, every check has a requirement and the requirements document is current."
+source = "verify/trace.py"
+verified_by = ["test:tests/test_traceability.py::Traceability::test_every_requirement_is_verified_and_every_link_resolves",
+               "test:tests/test_traceability.py::Traceability::test_document_is_current"]

@@ -99,6 +99,13 @@ def locate(raw: str, c: dict[str, Any]) -> dict[str, Any]:
     return {"state": "orphan"}
 
 
+def text_shows(raw: str, old: str, new: str) -> bool:
+    """The file shows an approved change: the replacement is there and the replaced passage is gone (unless the
+    passage is part of the replacement). Covers deletions, where the empty replacement is trivially "there".
+    Proved in verify/CommentLifecycle.tla (AppliedMeansEdited)."""
+    return (not new or new in raw) and (not old or old in new or old not in raw)
+
+
 class CommentService:
     def __init__(self, cfg: WorkbenchConfig) -> None:
         self.cfg = cfg
@@ -213,6 +220,11 @@ class CommentService:
             elif action == "accept":
                 if c.get("status") != "addressed" or not c.get("proposal"):
                     return 409, {"error": "nothing to accept"}
+                src = self.cfg.workspace / str(c.get("file", ""))
+                raw = src.read_text(encoding="utf-8", errors="ignore") if src.is_file() else ""
+                pq = c["proposal"].get("quote", "")
+                if not pq or raw.count(pq) != 1:  # verify/CommentLifecycle.tla: accept needs an anchored proposal
+                    return 409, {"error": "the proposal's passage is not in the text exactly once — ask for a new proposal"}
                 self._approve(c, author)
                 hist.append({"date": _now(), "by": author, "status": "approved"})
             elif action == "reattach":
@@ -312,8 +324,8 @@ class CommentService:
                 return f"{cid}: change is not approved and sealed by the author"
             src = self.cfg.workspace / c["file"]
             raw = src.read_text(encoding="utf-8", errors="ignore") if src.is_file() else ""
-            if c["proposal"]["replacement"] not in raw:
-                return f"{cid}: the approved replacement text is not in {c['file']}"
+            if not text_shows(raw, c["proposal"].get("quote", ""), c["proposal"]["replacement"]):
+                return f"{cid}: the text of {c['file']} does not show the approved change yet"
             c["status"] = "applied"
             c["proposal"]["applied_by"], c["proposal"]["applied_at"] = agent, _now()
             if note:

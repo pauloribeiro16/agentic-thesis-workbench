@@ -232,7 +232,10 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"{task['id']}  {task.get('status'):8} ch={task.get('chapter')}  {task.get('role') or task.get('workflow')}")
         else:
             task = svc.get(a.id)
-            print(json.dumps(task, indent=2, ensure_ascii=False) if task else f"{a.id}: not found")
+            if not task:
+                print(f"{a.id}: not found", file=sys.stderr)
+                return 2
+            print(json.dumps(task, indent=2, ensure_ascii=False))
         return 0
     if a.cmd == "review":
         from .tasks import TaskService

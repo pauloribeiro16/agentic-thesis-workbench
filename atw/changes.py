@@ -27,7 +27,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from .comments import _norm, plain_map
+from .comments import _norm, plain_map, text_shows
 from .config import WorkbenchConfig
 from .dialogue import DialogueService, ModeratorSeal
 
@@ -146,6 +146,13 @@ class ChangeService:
                     return 400, {"error": "invalid decision"}
                 if any(it.get("status") == "applied" for it in targets):
                     return 409, {"error": "already in the text — use review"}
+                if decision == "approved":  # verify/ChangeLifecycle.tla (ApproveNeedsAnchor)
+                    for it in targets:
+                        src = (self.cfg.workspace / str(it.get("file", ""))).resolve()
+                        raw = src.read_text(encoding="utf-8", errors="ignore") \
+                            if self.cfg.workspace.resolve() in src.parents and src.is_file() else ""
+                        if not it.get("old") or raw.count(it["old"]) != 1:
+                            return 409, {"error": f"{it.get('id')}: its old text is not in {it.get('file')} exactly once"}
                 for it in targets:
                     it["status"] = decision
                     it["decided_by"], it["decided_at"] = self.cfg.moderator_name, _today()
@@ -239,8 +246,8 @@ class ChangeService:
                 return f"{cid}: change is not approved and sealed by the author"
             src = self.cfg.workspace / it["file"]
             raw = src.read_text(encoding="utf-8", errors="ignore") if src.is_file() else ""
-            if it.get("new") and it["new"] not in raw:
-                return f"{cid}: the approved text is not in {it['file']}"
+            if not text_shows(raw, it.get("old", ""), it.get("new", "")):
+                return f"{cid}: the text of {it['file']} does not show the approved change yet"
             it["status"] = "applied"
             it["decision"] = "aprovada" if self.pt else "kept"
             it["applied"], it["applied_by"], it["task"] = _today(), agent, task
